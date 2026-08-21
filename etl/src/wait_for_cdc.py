@@ -1,10 +1,10 @@
 """CDC readiness gate for the powertools build job.
 
-The wal2delta sync (../resources/sync.yml) is a CONTINUOUS resource, so it can't
-be a task in this job — but every downstream task reads what it produces. Both
-`seed_gtm_events` (reads `lb_products_history`) and `cdc_to_current` (reads all
-four `lb_*_history` change-logs) will silently produce empty/partial output if
-they run before the sync has landed its first rows.
+The Lakebase CDF feed (see ../resources/lakebase.yml) is enabled outside the
+bundle, so it can't be a task in this job — but every downstream task reads what
+it produces. Both `seed_gtm_events` (reads `lb_products_history`) and
+`cdc_to_current` (reads all four `lb_*_history` change-logs) will silently
+produce empty/partial output if they run before CDF has landed its first rows.
 
 This task is the job's first node: it polls until ALL required history tables
 both EXIST and are POPULATED (at least one row), or fails after a timeout so the
@@ -69,8 +69,8 @@ def main() -> None:
             raise SystemExit(
                 "CDC readiness gate timed out after "
                 f"{args.timeout_seconds}s. Not yet populated: {pending}. "
-                "Ensure the continuous sync (../resources/sync.yml) is running "
-                "and the Lakebase OLTP tables have been seeded (open the webshop once)."
+                "Ensure Lakebase CDF is started (Lakebase Postgres > techsummit > "
+                "production > Lakebase CDF tab) and the OLTP tables have rows."
             )
         print(
             json.dumps(

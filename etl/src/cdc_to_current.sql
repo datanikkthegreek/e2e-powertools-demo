@@ -1,10 +1,20 @@
 -- CDC -> current-state collapse.
 --
--- The wal2delta sync (../resources/sync.yml) lands each Lakebase table as a
--- change-log `lb_*_history` (many change rows per row). Genie must only ever
--- see the collapsed current state, or it double-counts. For every history
--- table: rank ALL change rows per primary key (newest _pg_lsn first), keep the
--- newest (_rn = 1), and only THEN drop rows whose latest change is a delete.
+-- Lakebase Change Data Feed (CDF, the wal2delta extension) lands each Lakebase
+-- table as a change-log `lb_*_history` (many change rows per row) in this
+-- schema. Genie must only ever see the collapsed current state, or it
+-- double-counts. For every history table: rank ALL change rows per primary key
+-- by `_sort_by DESC` (CDF's monotonic ordering key), keep the newest (_rn = 1),
+-- and only THEN drop rows whose latest change is a delete.
+--
+-- CDF CHANGE-COLUMN CONTRACT (Lakebase CDF, not classic wal2delta):
+--   _pg_change_type : 'insert' | 'delete' | 'update_preimage' | 'update_postimage'
+--   _sort_by        : BIGINT, monotonic across ALL changes -> ORDER BY this
+--   _pg_lsn / _pg_xid / _timestamp : also present (LSN can tie within a txn, so
+--                     we order by _sort_by, which never ties, for determinism).
+-- An UPDATE emits TWO rows (update_preimage = old, update_postimage = new).
+-- Ranking by _sort_by DESC makes the postimage win, so keeping _rn = 1 and
+-- dropping both 'delete' and 'update_preimage' yields exactly the live row.
 --
 -- ============================================================================
 -- CANONICAL UUID NORMALIZATION CONTRACT (must stay identical across all sites)
@@ -42,11 +52,11 @@ SELECT
   price_eur
 FROM (
   SELECT *,
-         ROW_NUMBER() OVER (PARTITION BY id ORDER BY _pg_lsn DESC) AS _rn
+         ROW_NUMBER() OVER (PARTITION BY id ORDER BY _sort_by DESC) AS _rn
   FROM lb_products_history
 )
 WHERE _rn = 1
-  AND _pg_change_type <> 'delete';
+  AND _pg_change_type NOT IN ('delete', 'update_preimage');
 
 -- dim_customer
 CREATE OR REPLACE TABLE dim_customer AS
@@ -61,11 +71,11 @@ SELECT
   CAST(NULL AS DATE)            AS signup_date
 FROM (
   SELECT *,
-         ROW_NUMBER() OVER (PARTITION BY id ORDER BY _pg_lsn DESC) AS _rn
+         ROW_NUMBER() OVER (PARTITION BY id ORDER BY _sort_by DESC) AS _rn
   FROM lb_accounts_history
 )
 WHERE _rn = 1
-  AND _pg_change_type <> 'delete';
+  AND _pg_change_type NOT IN ('delete', 'update_preimage');
 
 -- fact_purchase (the money fact)
 CREATE OR REPLACE TABLE fact_purchase AS
@@ -89,11 +99,11 @@ SELECT
   total_eur
 FROM (
   SELECT *,
-         ROW_NUMBER() OVER (PARTITION BY id ORDER BY _pg_lsn DESC) AS _rn
+         ROW_NUMBER() OVER (PARTITION BY id ORDER BY _sort_by DESC) AS _rn
   FROM lb_purchases_history
 )
 WHERE _rn = 1
-  AND _pg_change_type <> 'delete';
+  AND _pg_change_type NOT IN ('delete', 'update_preimage');
 
 -- fact_purchase_line
 CREATE OR REPLACE TABLE fact_purchase_line AS
@@ -113,8 +123,8 @@ SELECT
   name_snapshot
 FROM (
   SELECT *,
-         ROW_NUMBER() OVER (PARTITION BY id ORDER BY _pg_lsn DESC) AS _rn
+         ROW_NUMBER() OVER (PARTITION BY id ORDER BY _sort_by DESC) AS _rn
   FROM lb_purchase_lines_history
 )
 WHERE _rn = 1
-  AND _pg_change_type <> 'delete';
+  AND _pg_change_type NOT IN ('delete', 'update_preimage');

@@ -5,7 +5,7 @@ bundle:
 #
 # DEPLOY THIS FIRST. It owns the techsummit Lakebase project (the OLTP source
 # the webshop App connects to) and the Delta data flow that feeds Genie:
-#   Lakebase (products/accounts/carts/purchases) --wal2delta--> lb_*_history
+#   Lakebase (products/accounts/carts/purchases) --Lakebase CDF--> lb_*_history
 #     --collapse--> dim_* / fact_* (current state)
 #   gtm_events (raw) --silver--> event_view_item + event_add_to_cart
 #     --key-normalize--> fact_view_item / fact_add_to_cart
@@ -32,12 +32,21 @@ variables:
     default: "raw_docs"
   warehouse_id:
     description: "SQL warehouse used by the curate (SQL) tasks."
-    default: "32a24efbd454bd06"
+    # FEVM's shared serverless "Serverless Starter Warehouse". The previously
+    # hard-coded id (32a24efbd454bd06) does not exist in this workspace.
+    default: "4615730c28d25332"
 
 targets:
   dev:
-    mode: development
     default: true
+    # NOTE: intentionally NOT `mode: development`. Development mode prepends
+    # "[dev <user>] " to resource names, which for a UC *schema* becomes part
+    # of the schema name (dev_<user>_techsummit) and cannot be reliably nulled
+    # (an empty name_prefix preset merges as "unset"). Every object here (silver
+    # pipeline, CDC synced tables, curate SQL tasks, the hard-coded IDP Volume
+    # path, and the webshop App) targets the bare `techsummit` schema/project,
+    # so any prefix would split the demo across two schemas. Deploying without a
+    # mode keeps every name canonical.
     workspace:
       host: https://adb-7405607030687545.5.azuredatabricks.net
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

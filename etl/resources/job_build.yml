@@ -3,15 +3,16 @@
 # task dependency graph rather than a hope expressed in the RUNBOOK.
 #
 # Full pipeline order (see ../../RUNBOOK.md):
-#   (a) provision Lakebase + seed OLTP  — done by deploying etl/ then the app/
-#       bundle; the webshop seeds products/accounts/carts/purchases into
-#       Lakebase on first connect. External to this job.
-#   (b) CDC sync Lakebase -> Delta       — the continuous `synced_database_tables`
-#       in ../resources/sync.yml; produces lb_*_history. External to this job
-#       (a continuous resource can't be a job task), and a PREREQUISITE of it:
-#       both seed_gtm_events (reads lb_products_history) and cdc_to_current
-#       (reads all lb_*_history) need it populated first. The `wait_for_cdc`
-#       gate task below enforces that readiness before any data task runs.
+#   (a) provision Lakebase + seed OLTP  — deploy etl/, then run
+#       ../src/seed_lakebase_oltp.py (products/accounts/carts/purchases +
+#       REPLICA IDENTITY FULL). External to this job.
+#   (b) Lakebase CDF Lakebase -> Delta   — the native change data feed
+#       (see ../resources/lakebase.yml); produces lb_*_history in UC, batched
+#       ~every 15s. Enabled + started outside the bundle (UI, one-time), and a
+#       PREREQUISITE of this job: both seed_gtm_events (reads lb_products_history)
+#       and cdc_to_current (reads all lb_*_history) need it populated first. The
+#       `wait_for_cdc` gate task below enforces that readiness before any data
+#       task runs.
 #   wait_for_cdc (gate) -> (c) GTM behavior seed -> (d) silver pipeline ->
 #       (e) curate are the tasks below, chained so each runs strictly after the
 #       last.
@@ -27,8 +28,8 @@ resources:
         - name: volume
           default: ${var.volume}
       tasks:
-        # (b-gate) CDC readiness gate. The continuous wal2delta sync (b) is not a
-        #     task in this job, so this first task POLLS until all four
+        # (b-gate) CDC readiness gate. The Lakebase CDF feed (b) is enabled
+        #     outside this job, so this first task POLLS until all four
         #     lb_*_history change-logs exist AND are populated before anything
         #     downstream reads them — failing loudly on timeout rather than
         #     building empty Genie tables.
