@@ -10,21 +10,59 @@
 # Specs are deliberately excluded — they are produced by IDP into product_specs
 # (see idp_product_specs.sql).
 resources:
+  # The Unity Catalog schema that owns every table/volume this bundle creates.
+  # Declared here so `bundle deploy` provisions it (and orders it before the
+  # raw_docs Volume, which cannot be created without its parent schema). All
+  # downstream SQL/curate tasks write into ${var.catalog}.${var.schema}.
+  schemas:
+    techsummit_schema:
+      catalog_name: ${var.catalog}
+      name: ${var.schema}
+      comment: "Bosch Power Tools demo — Genie base tables, silver events, CDC history, IDP specs."
+
   postgres_projects:
     techsummit:
       project_id: "techsummit"
       display_name: "techsummit"
-      default_branch: "production"
-      pg_version: 16
+      # The API expects the fully-qualified branch resource path here, not the
+      # bare branch id ("production" alone returns 400 INVALID_PARAMETER_VALUE).
+      default_branch: "projects/techsummit/branches/production"
+      # Postgres 17 is REQUIRED by Lakebase Change Data Feed (CDF). CDF captures
+      # every insert/update/delete on the OLTP tables into Delta `lb_*_history`
+      # tables (see the CDF note below); it only runs on a pg17 autoscaling
+      # project, so this must stay 17.
+      pg_version: 17
       # Keep the demo data on delete unless explicitly torn down.
       purge_on_delete: false
+
+# ── Lakebase -> Delta change capture (CDF) ─────────────────────────────────────
+# The OLTP -> Delta change flow is Lakebase Change Data Feed (CDF), the native
+# wal2delta feature for autoscaling Lakebase. It streams every insert/update/
+# delete on the `public` tables into Unity Catalog Delta tables named
+# `lb_<table>_history` in ${var.catalog}.${var.schema}, batched ~every 15s.
+# Genie NEVER sees these history tables directly — the curate job
+# (../src/cdc_to_current.sql) collapses them to current state (dim_* / fact_*).
+#
+# CDF is NOT expressible as a bundle resource (no CLI/DAB verb as of CLI v1.4.0);
+# it is enabled + started outside the bundle:
+#   1. Tables must have REPLICA IDENTITY FULL — set by ../src/seed_lakebase_oltp.py
+#      (which also installs an event trigger so future tables get it too).
+#   2. A workspace admin enables the "Lakebase Change Data Feed" preview.
+#   3. Start the feed once from the UI: Lakebase Postgres > project `techsummit`
+#      > branch `production` > "Lakebase CDF" tab > Start, mapping source schema
+#      `public` -> destination catalog ${var.catalog} / schema ${var.schema}.
+# The old `synced_database_tables` resource (Delta->Postgres reverse-sync, which
+# needs a provisioned instance) was removed — it was the wrong direction AND the
+# wrong instance type for autoscaling Lakebase. See ../../RUNBOOK.md.
 
   # A Volume for the raw datasheet/manual PDFs consumed by IDP + the Knowledge
   # Assistant: nikks_fevm_workspace_7405607030687545.techsummit.raw_docs
   volumes:
     raw_docs:
       catalog_name: ${var.catalog}
-      schema_name: ${var.schema}
+      # Reference the schema resource (not the raw var) so DAB provisions the
+      # techsummit schema before this Volume.
+      schema_name: ${resources.schemas.techsummit_schema.name}
       name: ${var.volume}
       volume_type: MANAGED
       comment: "Raw Bosch datasheet + manual PDFs (IDP source + Knowledge Assistant source)."

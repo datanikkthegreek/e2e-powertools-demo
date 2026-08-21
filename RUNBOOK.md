@@ -9,21 +9,33 @@ The data flow has a hard dependency chain — each step reads what the previous
 one produced. Run it in exactly this order:
 
 1. **Deploy the ETL bundle.** `cd etl && databricks bundle deploy -p FEVM` —
-   provisions the `techsummit` Lakebase project, the `raw_docs` Volume, the CDC
-   sync, the silver pipeline, and the `powertools-build` job.
-2. **Deploy the app + seed OLTP.** `cd app && apx build && databricks bundle deploy -p FEVM`,
-   then open the webshop once. On first connect it seeds the Lakebase OLTP
-   tables (products/accounts/carts/purchases/...). *(a) Lakebase now holds the
-   source-of-truth rows.*
-3. **Let the CDC sync populate.** The continuous `synced_database_tables` stream
-   the OLTP tables into Delta change-logs `lb_*_history`. Wait until they have
-   rows before running the build job. *(b) — must happen before step 5, because
-   both the GTM seed and `cdc_to_current` read `lb_products_history`.*
+   provisions the `techsummit` Lakebase project (**pg17**, required by CDF), the
+   `techsummit` UC schema, the `raw_docs` Volume, the silver pipeline, and the
+   `powertools-build` job.
+2. **Seed the OLTP.** `python etl/src/seed_lakebase_oltp.py --profile FEVM
+   --project techsummit`. Creates products/accounts/carts/cart_items/purchases/
+   purchase_lines with deterministic UUIDs and sets `REPLICA IDENTITY FULL` on
+   all of them (CDF prereq). *(a) Lakebase now holds the source-of-truth rows.*
+   (In production these arrive via the webshop App; Phase 1 seeds directly.)
+3. **Enable + start Lakebase CDF** (native Postgres→Delta change feed):
+   - Admin: enable the **Lakebase Change Data Feed** preview (workspace
+     Previews page).
+   - Lakebase Postgres > project `techsummit` > branch `production` >
+     **Lakebase CDF** tab > **Start**. Map source DB `databricks_postgres`,
+     schema `public` → destination catalog `${var.catalog}` (whatever the
+     deployed bundle target resolves it to — for the current FEVM target that
+     is `nikks_fevm_workspace_7405607030687545`), schema `${var.schema}`
+     (`techsummit` on the current FEVM target).
+   - CDF snapshots + streams every `public` table into
+     `lb_<table>_history` Delta tables (~15s batches). Wait until
+     `lb_products_history`, `lb_accounts_history`, `lb_purchases_history`,
+     `lb_purchase_lines_history` have rows. *(b) — must precede step 5: both the
+     GTM seed and `cdc_to_current` read the `lb_*_history` tables.*
 4. **Upload PDFs.** Real Bosch **datasheet** PDFs to
-   `…techsummit.raw_docs/datasheets` and **manual** PDFs to `…/manuals`
-   (needed by the IDP step inside the build job).
+   `…techsummit.raw_docs/datasheets` (needed by the IDP step inside the build
+   job). Manuals are a Phase-2 concern.
 5. **Run `powertools-build`.** One job, one enforced DAG:
-   `seed_gtm_events` (c) → `run_silver_pipeline` (d) →
+   `wait_for_cdc` (gate) → `seed_gtm_events` (c) → `run_silver_pipeline` (d) →
    `cdc_to_current` → `key_normalize` → `idp_product_specs` (e).
    This builds the 7 Genie base tables.
 6. **Build (UI):** Knowledge Assistant (manuals), Genie space (7 base tables),

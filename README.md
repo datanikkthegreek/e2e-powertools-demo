@@ -35,8 +35,7 @@ e2e-powertools-demo/
   etl/                       # BUNDLE 2 — ETL + Lakebase  (DEPLOY FIRST)
     databricks.yml
     resources/
-      lakebase.yml           # Lakebase project 'techsummit' + raw_docs Volume
-      sync.yml               # Lakebase -> Delta CDC sync (wal2delta) -> lb_*_history (bound to techsummit project)
+      lakebase.yml           # Lakebase project 'techsummit' (pg17) + raw_docs Volume + CDF setup notes
       pipeline_silver.yml    # gtm_events -> event_view_item + event_add_to_cart ONLY
       job_build.yml          # one DAG: seed_gtm -> silver -> cdc_to_current -> key_normalize -> idp
     pipelines/silver/transformations/
@@ -45,7 +44,8 @@ e2e-powertools-demo/
       event_add_to_cart.py   # kept
     src/
       seed_gtm_events.py     # behavior seed (view/cart focus)
-      cdc_to_current.sql     # lb_*_history -> dim_product / dim_customer / fact_purchase(_line)
+      seed_lakebase_oltp.py  # seed OLTP + set REPLICA IDENTITY FULL (CDF prereq)
+      cdc_to_current.sql     # lb_*_history (CDF) -> dim_product / dim_customer / fact_purchase(_line)
       key_normalize.sql      # item_id -> product_id -> fact_view_item / fact_add_to_cart
       idp_product_specs.sql  # ai_parse_document + ai_extract -> product_specs (+ crosswalk)
     data/

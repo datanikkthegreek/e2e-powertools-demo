@@ -79,18 +79,20 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
     """
     tbl = f"{catalog}.{schema}.lb_products_history"
     # Collapse to current state the same way cdc_to_current.sql does: rank ALL
-    # change rows per id first, keep the newest (_rn = 1), and only THEN drop
-    # rows whose latest change is a delete. Filtering deletes before ranking
-    # would let a deleted product's prior (non-delete) version surface as _rn=1
-    # and look active.
+    # Lakebase CDF change rows per id by `_sort_by DESC` (CDF's monotonic order
+    # key), keep the newest (_rn = 1), and only THEN drop rows whose latest
+    # change is a delete or the pre-image half of an update. Filtering before
+    # ranking would let a deleted/superseded product's prior version surface as
+    # _rn=1 and look active. (An UPDATE emits update_preimage + update_postimage;
+    # the postimage has the higher _sort_by, so it wins _rn=1.)
     df = (
         spark.table(tbl)
         .withColumn(
             "_rn",
-            F.expr("ROW_NUMBER() OVER (PARTITION BY id ORDER BY _pg_lsn DESC)"),
+            F.expr("ROW_NUMBER() OVER (PARTITION BY id ORDER BY _sort_by DESC)"),
         )
         .where(F.col("_rn") == 1)
-        .where(F.col("_pg_change_type") != "delete")
+        .where(~F.col("_pg_change_type").isin("delete", "update_preimage"))
         .select(
             # CANONICAL UUID NORMALIZATION CONTRACT (must stay identical across
             # all sites: etl/src/cdc_to_current.sql, etl/src/key_normalize.sql,
