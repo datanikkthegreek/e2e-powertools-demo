@@ -10,12 +10,14 @@ resources:
       name: "powertools-webshop"
       description: "Bosch Power Tools webshop — Databricks App on the techsummit Lakebase project."
       source_code_path: ../.build
-      # OBO user scopes: the app connects to Lakebase as the signed-in user
-      # (X-Forwarded-Access-Token), so the forwarded token needs the postgres
-      # (Lakebase endpoint/credential) and sql scopes.
-      user_api_scopes:
-        - postgres
-        - sql
+      # NOTE: the storefront connects to Lakebase and the SQL warehouse as the
+      # APP SERVICE PRINCIPAL (WorkspaceClient() -> w.postgres credential), not
+      # on behalf of the signed-in user. The only OBO call is the /me identity
+      # endpoint, which needs no extra scope. We therefore declare no
+      # user_api_scopes (the `postgres` OBO scope is also disallowed in this
+      # workspace). The app SP is instead granted a Postgres role on the
+      # techsummit Lakebase project post-deploy (see the "Deploying the Bosch
+      # Power Tools webshop onto the techsummit Lakebase" section in ./README.md).
       resources:
         # Zerobus OAuth client secret, injected as an env var via valueFrom
         # in ../app.yml (keeps the plaintext secret out of source control).
