@@ -39,9 +39,8 @@ e2e-powertools-demo/
       pipeline_silver.yml    # gtm_events -> event_view_item + event_add_to_cart ONLY
       job_build.yml          # one DAG: seed_gtm -> silver -> cdc_to_current -> key_normalize -> idp
     pipelines/silver/transformations/
-      _shared.py             # shared schema/helpers (config keys: pipeline.table_*)
-      event_view_item.py     # kept
-      event_add_to_cart.py   # kept
+      event_view_item.sql    # STREAMING TABLE: STREAM(gtm_events) -> view_item
+      event_add_to_cart.sql  # STREAMING TABLE: STREAM(gtm_events) -> add_to_cart
     src/
       seed_gtm_events.py     # behavior seed (view/cart focus)
       seed_lakebase_oltp.py  # seed OLTP + set REPLICA IDENTITY FULL (CDF prereq)
