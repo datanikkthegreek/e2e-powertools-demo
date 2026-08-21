@@ -10,9 +10,11 @@
 #       in ../resources/sync.yml; produces lb_*_history. External to this job
 #       (a continuous resource can't be a job task), and a PREREQUISITE of it:
 #       both seed_gtm_events (reads lb_products_history) and cdc_to_current
-#       (reads all lb_*_history) need it populated first.
-#   (c) GTM behavior seed  -> (d) silver pipeline -> (e) curate
-#       are the tasks below, chained so each runs strictly after the last.
+#       (reads all lb_*_history) need it populated first. The `wait_for_cdc`
+#       gate task below enforces that readiness before any data task runs.
+#   wait_for_cdc (gate) -> (c) GTM behavior seed -> (d) silver pipeline ->
+#       (e) curate are the tasks below, chained so each runs strictly after the
+#       last.
 resources:
   jobs:
     powertools_build:
@@ -25,9 +27,24 @@ resources:
         - name: volume
           default: ${var.volume}
       tasks:
+        # (b-gate) CDC readiness gate. The continuous wal2delta sync (b) is not a
+        #     task in this job, so this first task POLLS until all four
+        #     lb_*_history change-logs exist AND are populated before anything
+        #     downstream reads them — failing loudly on timeout rather than
+        #     building empty Genie tables.
+        - task_key: wait_for_cdc
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/wait_for_cdc.py
+            parameters:
+              - "--catalog=${var.catalog}"
+              - "--schema=${var.schema}"
+
         # (c) GTM behavior seed -> gtm_events. Reads lb_products_history, so the
-        #     CDC sync (b) must already be populated.
+        #     CDC sync (b) must already be populated — gated by wait_for_cdc.
         - task_key: seed_gtm_events
+          depends_on:
+            - task_key: wait_for_cdc
           environment_key: default
           spark_python_task:
             python_file: ../src/seed_gtm_events.py

@@ -18,8 +18,11 @@
 --   could see it, losing the binary branch. Keep every CASE below byte-for-byte
 --   identical to the other sites (only the column name changes).
 -- ============================================================================
-USE CATALOG nikks_fevm_workspace_7405607030687545;
-USE SCHEMA techsummit;
+-- Catalog/schema come from the `powertools-build` job parameters (:catalog /
+-- :schema), so a bundle target override is honored consistently with the other
+-- curate SQL tasks.
+USE CATALOG IDENTIFIER(:catalog);
+USE SCHEMA IDENTIFIER(:schema);
 
 -- fact_view_item: one row per product-detail-page view.
 -- event_view_item carries the GA4 `items` array; explode it to the SKU.

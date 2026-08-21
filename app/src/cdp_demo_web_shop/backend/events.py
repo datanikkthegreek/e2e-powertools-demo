@@ -2,9 +2,9 @@
 
 When ``ingestion_mode == "zerobus"``, the frontend POSTs normalized tracking
 events here. This route assembles a GA4-server-side ``eventData`` row matching
-the shape the data_pipeline silver tables parse (see ``EVENT_SCHEMA`` in
-``data_pipeline/pipelines/cdp_silver/transformations/_shared.py``) and inserts
-it into the configured ``gtm_events`` table via the Zerobus REST API.
+the shape the silver pipeline parses (see ``EVENT_SCHEMA`` in
+``etl/pipelines/silver/transformations/_shared.py``) and inserts it into the
+configured ``gtm_events`` table via the Zerobus REST API.
 """
 
 from __future__ import annotations

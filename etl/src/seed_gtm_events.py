@@ -10,9 +10,13 @@ the trimmed demo needs are produced:
 `event_purchase` is intentionally NOT seeded: Lakebase `purchases` /
 `purchase_lines` are the authoritative money fact.
 
-Each row matches the shape the silver pipeline expects (see
-../pipelines/silver/transformations/_shared.py): an outer envelope plus a
-JSON `eventData` string carrying the GA4 payload. `item_id` is the Lakebase
+Each row matches the raw `gtm_events` envelope the app writes in zerobus mode
+(see app/src/cdp_demo_web_shop/backend/events.py): 8 outer columns
+(ingestion_time, gtm_container_id, event_name, request_path, request_method,
+query_string, visitor_region) plus a JSON `eventData` string carrying the GA4
+payload. The GA4 `event_id` lives INSIDE `eventData`, not as a top-level column
+— the silver pipeline parses `eventData` into `ed` and reads `ed.event_id`
+(see ../pipelines/silver/transformations/_shared.py). `item_id` is the Lakebase
 product UUID as text, so the downstream key-normalize step lines the funnel up
 with `dim_product.product_id`.
 
@@ -45,10 +49,13 @@ ADD_TO_CART_RATE = 0.28
 
 RAW_EVENT_SCHEMA = StructType(
     [
-        StructField("event_id", StringType()),
-        StructField("event_name", StringType()),
         StructField("ingestion_time", LongType()),
         StructField("gtm_container_id", StringType()),
+        StructField("event_name", StringType()),
+        StructField("request_path", StringType()),
+        StructField("request_method", StringType()),
+        StructField("query_string", StringType()),
+        StructField("visitor_region", StringType()),
         StructField("eventData", StringType()),
     ]
 )
@@ -114,20 +121,31 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
 
 
 def _event_row(event_name: str, ts: datetime, user_id: str, payload: dict) -> tuple:
-    envelope = {
+    """Build one raw `gtm_events` row matching the Zerobus app envelope.
+
+    The 8 outer columns mirror the row the app writes in zerobus mode (see
+    app/src/cdp_demo_web_shop/backend/events.py). The GA4 `event_id` lives INSIDE
+    the JSON `eventData` string (the silver pipeline reads `ed.event_id`), never
+    as a top-level column. `event_id` uses the app's `{unix_ms}_{hex}` shape.
+    """
+    event_unix_ms = int(ts.timestamp() * 1000)
+    event_data = {
         "event_name": event_name,
+        "event_id": f"{event_unix_ms}_{uuid.uuid4().hex}",
         "timestamp": ts.isoformat(),
         "user_id": user_id,
-        "gtm_container_id": GTM_CONTAINER_ID,
         "x-ga-measurement_id": GA_MEASUREMENT_ID,
         **payload,
     }
     return (
-        str(uuid.uuid4()),
-        event_name,
-        int(ts.timestamp() * 1000),
-        GTM_CONTAINER_ID,
-        json.dumps(envelope),
+        event_unix_ms,           # ingestion_time
+        GTM_CONTAINER_ID,        # gtm_container_id
+        event_name,              # event_name
+        "/gtm",                  # request_path (app default when no page_location)
+        "POST",                  # request_method
+        "",                      # query_string
+        None,                    # visitor_region
+        json.dumps(event_data),  # eventData
     )
 
 
@@ -207,8 +225,8 @@ def main() -> None:
                 "users": args.users,
                 "weeks": args.weeks,
                 "rows_written": len(rows),
-                "view_item": sum(1 for r in rows if r[1] == "view_item"),
-                "add_to_cart": sum(1 for r in rows if r[1] == "add_to_cart"),
+                "view_item": sum(1 for r in rows if r[2] == "view_item"),
+                "add_to_cart": sum(1 for r in rows if r[2] == "add_to_cart"),
             }
         )
     )

@@ -8,9 +8,14 @@
 -- Battery/charger datasheets legitimately lack torque/rpm; those rows keep
 -- voltage/weight/price and leave tool-only fields NULL.
 --
--- Volume: nikks_fevm_workspace_7405607030687545.techsummit.raw_docs/datasheets
-USE CATALOG nikks_fevm_workspace_7405607030687545;
-USE SCHEMA techsummit;
+-- Catalog/schema come from the `powertools-build` job parameters (:catalog /
+-- :schema), so the product_specs target and the dim_product join resolve in the
+-- same namespace as the other curate SQL tasks under a bundle target override.
+-- NOTE: the READ_FILES Volume path below is still a literal
+-- (…/techsummit/raw_docs/datasheets); parameterizing a READ_FILES path is not
+-- done here because a non-literal path is not guaranteed to fold in that TVF.
+USE CATALOG IDENTIFIER(:catalog);
+USE SCHEMA IDENTIFIER(:schema);
 
 -- 1) Parse each datasheet PDF, then extract typed fields.
 CREATE OR REPLACE TEMP VIEW _parsed_datasheets AS

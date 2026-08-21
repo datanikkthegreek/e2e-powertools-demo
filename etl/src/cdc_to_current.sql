@@ -22,10 +22,12 @@
 --   identical to the other sites (only the column name changes).
 -- ============================================================================
 --
--- Catalog/schema are the isolated techsummit environment. The `powertools-build`
--- job also passes them as parameters (:catalog / :schema) for reuse.
-USE CATALOG nikks_fevm_workspace_7405607030687545;
-USE SCHEMA techsummit;
+-- Catalog/schema come from the `powertools-build` job parameters (:catalog /
+-- :schema, defaulting to the isolated techsummit environment) so a bundle
+-- target override is actually honored. IDENTIFIER() promotes the string
+-- parameter to a catalog/schema identifier.
+USE CATALOG IDENTIFIER(:catalog);
+USE SCHEMA IDENTIFIER(:schema);
 
 -- dim_product (specs are NOT here — they come from IDP -> product_specs)
 CREATE OR REPLACE TABLE dim_product AS
