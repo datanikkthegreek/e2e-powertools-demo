@@ -1,0 +1,35 @@
+# Silver pipeline (TRIMMED).
+#
+# gtm_events (raw Delta) -> event_view_item + event_add_to_cart ONLY.
+# All other silver tables (purchase / pageview / abandon / signup) and every
+# gold cart MV + gold_customer_360 have been removed from this pipeline: the
+# demo funnel is view -> cart, and the money fact comes from Lakebase.
+resources:
+  pipelines:
+    powertools_silver:
+      name: "powertools-silver-${bundle.target}"
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      channel: "PREVIEW"
+      configuration:
+        pipeline.table_catalog: ${var.catalog}
+        pipeline.table_schema: ${var.schema}
+      libraries:
+        - file:
+            path: ../pipelines/silver/transformations/_shared.py
+        - file:
+            path: ../pipelines/silver/transformations/event_view_item.py
+        - file:
+            path: ../pipelines/silver/transformations/event_add_to_cart.py
+
+  jobs:
+    # Named to match the app's CDP_DEMO_WEB_SHOP_TRIGGERED_JOB_NAME so the
+    # webshop Analytics "Run pipeline" button resolves it.
+    powertools_silver_job:
+      name: "powertools-silver"
+      tasks:
+        - task_key: run_silver_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.powertools_silver.id}
+            full_refresh: false

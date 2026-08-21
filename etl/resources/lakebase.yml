@@ -1,0 +1,30 @@
+# Lakebase (Postgres) OLTP — the money/webshop source of truth.
+#
+# This bundle OWNS the Lakebase project; the app/ bundle only references it.
+# Deploy this bundle FIRST so the project + primary endpoint exist before the
+# webshop App boots.
+#
+# OLTP tables kept (all created lazily by the app's SQLModel schema on first
+# connect, NOT as bundle resources):
+#   products (NO specs), accounts, carts, cart_items, purchases, purchase_lines
+# Specs are deliberately excluded — they are produced by IDP into product_specs
+# (see idp_product_specs.sql).
+resources:
+  postgres_projects:
+    techsummit:
+      project_id: "techsummit"
+      display_name: "techsummit"
+      default_branch: "production"
+      pg_version: 16
+      # Keep the demo data on delete unless explicitly torn down.
+      purge_on_delete: false
+
+  # A Volume for the raw datasheet/manual PDFs consumed by IDP + the Knowledge
+  # Assistant: nikks_fevm_workspace_7405607030687545.techsummit.raw_docs
+  volumes:
+    raw_docs:
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      name: ${var.volume}
+      volume_type: MANAGED
+      comment: "Raw Bosch datasheet + manual PDFs (IDP source + Knowledge Assistant source)."

@@ -1,0 +1,47 @@
+command: ["uvicorn", "cdp_demo_web_shop.backend.app:app", "--workers", "2"]
+env:
+  # --- SQL Warehouse (analytics) ---
+  - name: DATABRICKS_SQL_WAREHOUSE_ID
+    value: "32a24efbd454bd06"
+  # --- Lakebase Autoscaling Postgres (shop CRUD) ---
+  # Project provisioned by the etl/ bundle (etl/resources/lakebase.yml).
+  - name: LAKEBASE_PROJECT_ID
+    value: "techsummit"
+  - name: LAKEBASE_BRANCH_ID
+    value: "production"
+  - name: LAKEBASE_ENDPOINT_ID
+    value: "primary"
+  - name: PGPORT
+    value: "5432"
+  # --- Event ingestion mode ---
+  - name: CDP_DEMO_WEB_SHOP_INGESTION_MODE
+    value: "zerobus"
+  # --- Zerobus REST ingestion (writes GA4-style behavior into gtm_events) ---
+  # Workspace = FEVM (adb-7405607030687545). Catalog/schema repointed to the
+  # isolated techsummit environment.
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_WORKSPACE_ID
+    value: "7405607030687545"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_WORKSPACE_URL
+    value: "https://adb-7405607030687545.5.azuredatabricks.net"
+  # TODO(deploy): set the FEVM Zerobus ingestion endpoint host for this workspace.
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_ENDPOINT
+    value: "REPLACE_WITH_FEVM_ZEROBUS_ENDPOINT"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CATALOG
+    value: "nikks_fevm_workspace_7405607030687545"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_SCHEMA
+    value: "techsummit"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_TABLE
+    value: "gtm_events"
+  # TODO(deploy): set the Zerobus OAuth client id created for the techsummit env.
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CLIENT_ID
+    value: "REPLACE_WITH_FEVM_ZEROBUS_CLIENT_ID"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CLIENT_SECRET
+    valueFrom: "zerobus-client-secret"
+  # --- GTM / GA4 identifiers ---
+  - name: CDP_DEMO_WEB_SHOP_GTM_CONTAINER_ID
+    value: "GTM-K29QPLV2"
+  - name: CDP_DEMO_WEB_SHOP_GA_MEASUREMENT_ID
+    value: "G-C31T0FRWHZ"
+  # --- Analytics "Run pipeline" job (etl/ bundle silver pipeline job) ---
+  - name: CDP_DEMO_WEB_SHOP_TRIGGERED_JOB_NAME
+    value: "powertools-silver"
