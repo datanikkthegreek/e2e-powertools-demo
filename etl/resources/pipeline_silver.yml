@@ -12,16 +12,11 @@ resources:
       schema: ${var.schema}
       serverless: true
       channel: "PREVIEW"
-      configuration:
-        pipeline.table_catalog: ${var.catalog}
-        pipeline.table_schema: ${var.schema}
       libraries:
         - file:
-            path: ../pipelines/silver/transformations/_shared.py
+            path: ../pipelines/silver/transformations/event_view_item.sql
         - file:
-            path: ../pipelines/silver/transformations/event_view_item.py
-        - file:
-            path: ../pipelines/silver/transformations/event_add_to_cart.py
+            path: ../pipelines/silver/transformations/event_add_to_cart.sql
 
 # The silver pipeline is run as the `run_silver_pipeline` task inside the
 # powertools-build orchestration job (../resources/job_build.yml), so the
