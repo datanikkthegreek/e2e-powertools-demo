@@ -1,0 +1,43 @@
+bundle:
+  name: "cdp-demo-web-shop"
+
+sync:
+  include:
+    - .build
+
+artifacts:
+  default:
+    build: apx build
+
+resources:
+  apps:
+    cdp-demo-web-shop-app:
+      name: "cdp-demo-web-shop"
+      description: "cdp-demo-web-shop created with apx"
+      source_code_path: ./.build
+      # OBO user scopes: the app connects to Lakebase as the signed-in user
+      # (X-Forwarded-Access-Token), so the forwarded token needs the postgres
+      # (Lakebase endpoint/credential) and sql scopes.
+      user_api_scopes:
+        - postgres
+        - sql
+      resources:
+        # Zerobus OAuth client secret, injected as an env var via valueFrom
+        # in app.yml (keeps the plaintext secret out of source control).
+        - name: "zerobus-client-secret"
+          secret:
+            scope: "cdp_demo"
+            key: "zerobus_client_secret"
+            permission: "READ"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      root_path: /Workspace/Users/nikolaos.servos@databricks.com/.bundle/${bundle.name}/${bundle.target}
+
+  gtm:
+    mode: development
+    workspace:
+      root_path: /Workspace/Users/nikolaos.servos@databricks.com/.bundle/${bundle.name}/${bundle.target}

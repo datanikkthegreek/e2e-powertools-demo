@@ -1,0 +1,98 @@
+bundle:
+  name: "cdp-demo-data-pipeline"
+
+variables:
+  table_catalog:
+    description: "Unity Catalog catalog used by all CDP pipeline tables."
+    default: "serverless_sandbox_avaa82_catalog"
+  table_schema:
+    description: "Unity Catalog schema used by all CDP pipeline tables."
+    default: "cdp"
+
+resources:
+  pipelines:
+    cdp_streaming_pipeline:
+      name: "cdp-streaming-${bundle.target}"
+      catalog: ${var.table_catalog}
+      schema: ${var.table_schema}
+      configuration:
+        cdp.table_catalog: ${var.table_catalog}
+        cdp.table_schema: ${var.table_schema}
+      continuous: true
+      serverless: true
+      channel: "PREVIEW"
+      libraries:
+        - file:
+            path: ./pipelines/cdp_silver/transformations/_shared.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/event_sign_up.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/event_purchase.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/sinks.py
+
+    cdp_triggered_pipeline:
+      name: "cdp-triggered-${bundle.target}"
+      catalog: ${var.table_catalog}
+      schema: ${var.table_schema}
+      configuration:
+        cdp.table_catalog: ${var.table_catalog}
+        cdp.table_schema: ${var.table_schema}
+      continuous: false
+      serverless: true
+      channel: "PREVIEW"
+      libraries:
+        - file:
+            path: ./pipelines/cdp_silver/transformations/_shared.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/event_pageview.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/event_view_item.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/event_add_to_cart.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/event_abandon_cart.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/event_account_deleted.py
+        - file:
+            path: ./pipelines/cdp_silver/transformations/cart_filtered.sql
+        - file:
+            path: ./pipelines/cdp_silver/transformations/cart_aggregated.sql
+        - file:
+            path: ./pipelines/cdp_silver/transformations/cart_abandoned.sql
+        - file:
+            path: ./pipelines/cdp_silver/transformations/cart_abandoned_with_email.sql
+        - file:
+            path: ./pipelines/cdp_silver/transformations/gold_customer_360.sql
+        - file:
+            path: ./pipelines/cdp_silver/transformations/gold_page_engagement.sql
+
+  jobs:
+    cdp_streaming_job:
+      name: "cdp-streaming-${bundle.target}"
+      tasks:
+        - task_key: run_streaming_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.cdp_streaming_pipeline.id}
+      continuous:
+        pause_status: UNPAUSED
+
+    cdp_batch_job:
+      name: "cdp-batch-${bundle.target}"
+      tasks:
+        - task_key: run_triggered_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.cdp_triggered_pipeline.id}
+            full_refresh: false
+
+targets:
+  dev:
+    mode: production #development
+    default: false #for development set to true
+    workspace:
+      root_path: /Workspace/Users/nikolaos.servos@databricks.com/.bundle/${bundle.name}/${bundle.target}
+
+  gtm:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/nikolaos.servos@databricks.com/.bundle/${bundle.name}/${bundle.target}

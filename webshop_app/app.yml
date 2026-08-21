@@ -1,0 +1,42 @@
+command: ["uvicorn", "cdp_demo_web_shop.backend.app:app", "--workers", "2"]
+env:
+  # --- SQL Warehouse (analytics) ---
+  - name: DATABRICKS_SQL_WAREHOUSE_ID
+    value: "32a24efbd454bd06"
+  # --- Lakebase Autoscaling Postgres (shop CRUD) ---
+  - name: LAKEBASE_PROJECT_ID
+    value: "cdp"
+  - name: LAKEBASE_BRANCH_ID
+    value: "production"
+  - name: LAKEBASE_ENDPOINT_ID
+    value: "primary"
+  - name: PGPORT
+    value: "5432"
+  # --- Event ingestion mode ---
+  - name: CDP_DEMO_WEB_SHOP_INGESTION_MODE
+    value: "zerobus"
+  # --- Zerobus REST ingestion ---
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_WORKSPACE_ID
+    value: "7474645853613305"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_WORKSPACE_URL
+    value: "https://fe-sandbox-serverless-sandbox-avaa82.cloud.databricks.com"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_ENDPOINT
+    value: "7474645853613305.zerobus.us-east-1.cloud.databricks.com"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CATALOG
+    value: "serverless_sandbox_avaa82_catalog"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_SCHEMA
+    value: "cdp"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_TABLE
+    value: "gtm_events"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CLIENT_ID
+    value: "9b9cf64b-f3ee-4e76-bcd0-ae202ef6d50b"
+  - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CLIENT_SECRET
+    valueFrom: "zerobus-client-secret"
+  # --- GTM / GA4 identifiers ---
+  - name: CDP_DEMO_WEB_SHOP_GTM_CONTAINER_ID
+    value: "GTM-K29QPLV2"
+  - name: CDP_DEMO_WEB_SHOP_GA_MEASUREMENT_ID
+    value: "G-C31T0FRWHZ"
+  # --- Analytics "Run pipeline" job ---
+  - name: CDP_DEMO_WEB_SHOP_TRIGGERED_JOB_NAME
+    value: "cdp-batch-gtm"

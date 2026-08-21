@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "../../zerobus-google-tag-manager-community-connector-main"
+		},
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../databricks_data_extraction"
+		},
+		{
+			"path": "../../sacopilot"
+		}
+	],
+	"settings": {}
+}
