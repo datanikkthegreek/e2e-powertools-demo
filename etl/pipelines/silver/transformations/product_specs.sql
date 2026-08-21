@@ -2,9 +2,10 @@
 --
 -- Streams _extracted_specs and EXPLODES its `specs` ARRAY<STRUCT> to one row per
 -- extracted model, exactly the way event_view_item's `items` array is exploded
--- in key_normalize (LATERAL VIEW explode). OUTER explode keeps a row for a
--- datasheet that yields no parseable model, so the table stays one-row-per-PDF
--- (~12 rows) even when a placeholder PDF extracts nothing.
+-- in key_normalize (LATERAL VIEW explode). Plain explode (not OUTER) keeps this
+-- truly one-row-per-extracted-model: a datasheet that extracts nothing produces
+-- no row rather than an all-NULL placeholder. Each of the 12 datasheets yields
+-- exactly one model today, so product_specs is 12 rows.
 --
 -- The numeric columns are already TYPED (DOUBLE / INT) coming out of the typed
 -- ai_extract response schema -- there is NO regexp_extract / try_cast unit
@@ -27,4 +28,4 @@ SELECT
   spec.weight_kg           AS weight_kg,
   spec.battery_platform    AS battery_platform
 FROM STREAM(_extracted_specs) e
-LATERAL VIEW OUTER explode(e.specs) t AS spec;
+LATERAL VIEW explode(e.specs) t AS spec;

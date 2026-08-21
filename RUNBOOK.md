@@ -41,6 +41,13 @@ one produced. Run it in exactly this order:
    three streaming tables; IDP no longer depends on the curate chain because
    `product_specs` is no longer keyed to `dim_product`.
    This builds the 7 Genie base tables.
+   > **IDP reprocessing:** the IDP stages are streaming and `ai_extract` is
+   > pinned to `version 2.0`. Changing an IDP prompt/schema/version does **not**
+   > re-run it over datasheets already consumed — do a **full refresh** of the
+   > three IDP streaming tables to re-extract
+   > (`databricks bundle run powertools_silver --full-refresh _parsed_datasheets,_extracted_specs,product_specs -p FEVM`).
+   > A full refresh recomputes the event tables from the existing `gtm_events`
+   > (it does **not** re-run `seed_gtm_events`), so the funnel counts stay put.
 6. **Build (UI):** Knowledge Assistant (manuals), Genie space (7 base tables),
    Supervisor agent (Genie + Knowledge Assistant).
 

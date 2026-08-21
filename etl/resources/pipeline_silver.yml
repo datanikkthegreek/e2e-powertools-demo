@@ -12,7 +12,15 @@
 # job_build.yml). It is now three streaming tables (parse -> typed extract ->
 # explode) that mirror the event tables' local style. product_specs is keyed by
 # source_path + model_name (it no longer joins dim_product / carries product_id),
-# so IDP no longer depends on the curate chain.
+# so IDP no longer depends on the curate chain. ai_extract is pinned to version
+# 2.0 (deterministic response shape) and returns typed numerics with no regex.
+#
+# Because the IDP stages are STREAMING, changing an ai_parse_document/ai_extract
+# prompt, schema, or pinned version does NOT re-run them over datasheets already
+# consumed -- a FULL REFRESH of the three IDP streaming tables is required to
+# re-extract. A full refresh recomputes the event tables from the EXISTING
+# gtm_events too (it does NOT re-run seed_gtm_events), so the funnel counts stay
+# put; prefer a targeted refresh of just the IDP tables when possible.
 resources:
   pipelines:
     powertools_silver:
