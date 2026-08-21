@@ -85,7 +85,26 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
         .where(F.col("_rn") == 1)
         .where(F.col("_pg_change_type") != "delete")
         .select(
-            F.col("id").cast("string").alias("product_id"),
+            # Normalize the Lakebase id to canonical lowercase hyphenated UUID
+            # text HERE, before it is serialized into the behavioral `item_id`.
+            # This is the same normalization contract cdc_to_current.sql and
+            # key_normalize.sql apply to dim_product.product_id, so the
+            # view/add-to-cart -> product funnel join lines up regardless of
+            # whether wal2delta emits the id as binary or string:
+            #   * binary            -> hex (32 chars) -> hyphenate 8-4-4-4-12;
+            #   * 32-char hex string-> hyphenate 8-4-4-4-12;
+            #   * already-hyphenated-> pass through.
+            # (A plain .cast("string") on a binary id is NOT canonical, which
+            # would push item_id down key_normalize's string pass-through and
+            # silently break the join.)
+            F.expr(
+                "CASE "
+                "WHEN typeof(id) = 'binary' "
+                "THEN lower(regexp_replace(hex(id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5')) "
+                "WHEN lower(CAST(id AS STRING)) RLIKE '^[0-9a-f]{32}$' "
+                "THEN lower(regexp_replace(CAST(id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5')) "
+                "ELSE lower(CAST(id AS STRING)) END"
+            ).alias("product_id"),
             F.col("name"),
             F.col("price_eur"),
         )
