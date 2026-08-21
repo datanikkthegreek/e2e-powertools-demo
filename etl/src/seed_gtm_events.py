@@ -85,18 +85,19 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
         .where(F.col("_rn") == 1)
         .where(F.col("_pg_change_type") != "delete")
         .select(
-            # Normalize the Lakebase id to canonical lowercase hyphenated UUID
-            # text HERE, before it is serialized into the behavioral `item_id`.
-            # This is the same normalization contract cdc_to_current.sql and
-            # key_normalize.sql apply to dim_product.product_id, so the
-            # view/add-to-cart -> product funnel join lines up regardless of
-            # whether wal2delta emits the id as binary or string:
-            #   * binary            -> hex (32 chars) -> hyphenate 8-4-4-4-12;
-            #   * 32-char hex string-> hyphenate 8-4-4-4-12;
-            #   * already-hyphenated-> pass through.
+            # CANONICAL UUID NORMALIZATION CONTRACT (must stay identical across
+            # all sites: etl/src/cdc_to_current.sql, etl/src/key_normalize.sql,
+            # and here). Reduce the Lakebase id to canonical lowercase hyphenated
+            # UUID text HERE, before it is serialized into the behavioral
+            # `item_id`, so item_id == dim_product.product_id regardless of the
+            # wal2delta output type:
+            #   1. binary                -> hex(id) [32 chars] -> hyphenate 8-4-4-4-12 -> lower
+            #   2. string ^[0-9a-f]{32}$ -> hyphenate 8-4-4-4-12 -> lower   (case-insensitive)
+            #   3. else                  -> lower(CAST(id AS STRING))
             # (A plain .cast("string") on a binary id is NOT canonical, which
-            # would push item_id down key_normalize's string pass-through and
-            # silently break the join.)
+            # would push item_id down the string pass-through and silently break
+            # the join.) The CASE below is byte-for-byte identical to the SQL
+            # sites (only the column name changes).
             F.expr(
                 "CASE "
                 "WHEN typeof(id) = 'binary' "
