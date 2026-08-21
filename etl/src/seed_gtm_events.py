@@ -16,7 +16,7 @@ JSON `eventData` string carrying the GA4 payload. `item_id` is the Lakebase
 product UUID as text, so the downstream key-normalize step lines the funnel up
 with `dim_product.product_id`.
 
-Run as a Databricks job task (see ../resources/job_seed.yml):
+Run as a Databricks job task (the seed_gtm_events task in ../resources/job_build.yml):
     seed_gtm_events.py --catalog <cat> --schema <schema> --weeks 6 --users 100
 
 NOTE: this is the demo seed generator. It reads the active product UUIDs from
@@ -71,14 +71,19 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
     should run the CDC sync first.
     """
     tbl = f"{catalog}.{schema}.lb_products_history"
+    # Collapse to current state the same way cdc_to_current.sql does: rank ALL
+    # change rows per id first, keep the newest (_rn = 1), and only THEN drop
+    # rows whose latest change is a delete. Filtering deletes before ranking
+    # would let a deleted product's prior (non-delete) version surface as _rn=1
+    # and look active.
     df = (
         spark.table(tbl)
-        .where(F.col("_pg_change_type") != "delete")
         .withColumn(
             "_rn",
             F.expr("ROW_NUMBER() OVER (PARTITION BY id ORDER BY _pg_lsn DESC)"),
         )
         .where(F.col("_rn") == 1)
+        .where(F.col("_pg_change_type") != "delete")
         .select(
             F.col("id").cast("string").alias("product_id"),
             F.col("name"),

@@ -44,28 +44,13 @@ class AppConfig(BaseSettings):
     zerobus_client_id: str = Field(default="")
     zerobus_client_secret: SecretStr = Field(default=SecretStr(""))
 
-    # --- Analytics: abandoned-carts source (gold materialized view) ---
-    # Lives in the same catalog/schema as the events table. One row per
-    # abandoned cart (carts anti-joined against purchases).
-    abandoned_carts_table: str = Field(default="cart_abandoned")
-
     # --- GA4 / GTM identifiers stamped into the synthesized eventData row ---
     gtm_container_id: str = Field(default="GTM-K29QPLV2")
     ga_measurement_id: str = Field(default="G-C31T0FRWHZ")
 
-    # --- Databricks job that runs the silver pipeline ---
-    # The Analytics page resolves this job by name and triggers it via run_now.
-    triggered_job_name: str = Field(default="powertools-silver")
-
     @property
     def zerobus_table_fqn(self) -> str:
         return f"{self.zerobus_catalog}.{self.zerobus_schema}.{self.zerobus_table}"
-
-    @property
-    def abandoned_carts_table_fqn(self) -> str:
-        return (
-            f"{self.zerobus_catalog}.{self.zerobus_schema}.{self.abandoned_carts_table}"
-        )
 
     @property
     def static_assets_path(self) -> Path:

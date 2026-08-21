@@ -23,13 +23,8 @@ resources:
         - file:
             path: ../pipelines/silver/transformations/event_add_to_cart.py
 
-  jobs:
-    # Named to match the app's CDP_DEMO_WEB_SHOP_TRIGGERED_JOB_NAME so the
-    # webshop Analytics "Run pipeline" button resolves it.
-    powertools_silver_job:
-      name: "powertools-silver"
-      tasks:
-        - task_key: run_silver_pipeline
-          pipeline_task:
-            pipeline_id: ${resources.pipelines.powertools_silver.id}
-            full_refresh: false
+# The silver pipeline is run as the `run_silver_pipeline` task inside the
+# powertools-build orchestration job (../resources/job_build.yml), so the
+# seed -> silver -> curate order is a single enforced DAG. There is no
+# standalone "run pipeline" job: the app's Analytics page (its only caller)
+# has been removed.

@@ -36,10 +36,9 @@ e2e-powertools-demo/
     databricks.yml
     resources/
       lakebase.yml           # Lakebase project 'techsummit' + raw_docs Volume
-      sync.yml               # Lakebase -> Delta CDC sync (wal2delta) -> lb_*_history
+      sync.yml               # Lakebase -> Delta CDC sync (wal2delta) -> lb_*_history (bound to techsummit project)
       pipeline_silver.yml    # gtm_events -> event_view_item + event_add_to_cart ONLY
-      job_seed.yml           # seed_gtm_events multi-week backfill (view/cart)
-      job_curate.yml         # CDC->current, key-normalize, IDP -> product_specs
+      job_build.yml          # one DAG: seed_gtm -> silver -> cdc_to_current -> key_normalize -> idp
     pipelines/silver/transformations/
       _shared.py             # shared schema/helpers (config keys: pipeline.table_*)
       event_view_item.py     # kept
@@ -119,10 +118,14 @@ Knowledge Assistant, and Supervisor agent are UI-built (see `RUNBOOK.md`).
 
 ## Notes / follow-ups
 
-- The webshop's in-app **Analytics** page is legacy from the CDP demo; its
-  `cart_abandoned` gold source is not part of the trimmed pipeline. It is left
-  in place (repointed to `techsummit`) but is not part of the demo narrative —
-  analytics is told through Genie.
+- The webshop's legacy in-app **Analytics** page (and its `cdp-triggered`
+  pipeline trigger) has been **removed** — it queried tables that no longer
+  exist in the trimmed pipeline (`event_sign_up` / `event_purchase` /
+  `gold_customer_360` / `cart_abandoned`) and would have errored live. The
+  analytics story is told through the Genie space instead. The route, nav link,
+  backend `analytics.py`/`jobs.py`, and their models/config were deleted; the
+  dead client wrappers left in the generated `ui/lib/api.ts` (nothing imports
+  them) are regenerated away on the next `apx build`.
 - `etl/src/*.sql` and `seed_gtm_events.py` are coherent stubs matching the PRD
   steps; they are meant to be run/tuned during the post-approval integration
   phase, not before.

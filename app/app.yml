@@ -42,6 +42,3 @@ env:
     value: "GTM-K29QPLV2"
   - name: CDP_DEMO_WEB_SHOP_GA_MEASUREMENT_ID
     value: "G-C31T0FRWHZ"
-  # --- Analytics "Run pipeline" job (etl/ bundle silver pipeline job) ---
-  - name: CDP_DEMO_WEB_SHOP_TRIGGERED_JOB_NAME
-    value: "powertools-silver"

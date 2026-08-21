@@ -5,6 +5,13 @@
 # tables directly — the curate job (cdc_to_current.sql) collapses them to
 # current state (dim_* / fact_*).
 #
+# BINDING: every synced table names the Lakebase project THIS bundle
+# provisions (etl/resources/lakebase.yml) via
+# `${resources.postgres_projects.techsummit.project_id}`. That interpolation
+# both (a) targets the techsummit project rather than some ambient instance and
+# (b) makes DAB order the project's creation before these synced tables, so the
+# sync can never point at a project that doesn't exist yet.
+#
 # Only the tables the demo needs are synced:
 #   products      -> lb_products_history        (-> dim_product)
 #   accounts      -> lb_accounts_history         (-> dim_customer)
@@ -16,6 +23,7 @@ resources:
   synced_database_tables:
     lb_products_history:
       name: ${var.catalog}.${var.schema}.lb_products_history
+      database_instance_name: ${resources.postgres_projects.techsummit.project_id}
       logical_database_name: databricks_postgres
       spec:
         source_table_full_name: public.products
@@ -29,6 +37,7 @@ resources:
 
     lb_accounts_history:
       name: ${var.catalog}.${var.schema}.lb_accounts_history
+      database_instance_name: ${resources.postgres_projects.techsummit.project_id}
       logical_database_name: databricks_postgres
       spec:
         source_table_full_name: public.accounts
@@ -42,6 +51,7 @@ resources:
 
     lb_purchases_history:
       name: ${var.catalog}.${var.schema}.lb_purchases_history
+      database_instance_name: ${resources.postgres_projects.techsummit.project_id}
       logical_database_name: databricks_postgres
       spec:
         source_table_full_name: public.purchases
@@ -55,6 +65,7 @@ resources:
 
     lb_purchase_lines_history:
       name: ${var.catalog}.${var.schema}.lb_purchase_lines_history
+      database_instance_name: ${resources.postgres_projects.techsummit.project_id}
       logical_database_name: databricks_postgres
       spec:
         source_table_full_name: public.purchase_lines

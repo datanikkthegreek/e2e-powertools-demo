@@ -8,7 +8,6 @@ const NAV = [
   { to: "/cart", label: "Cart" },
   { to: "/accounts", label: "Accounts" },
   { to: "/purchases", label: "Purchases" },
-  { to: "/analytics", label: "Analytics" },
 ] as const;
 
 export function ShopNavbar() {
