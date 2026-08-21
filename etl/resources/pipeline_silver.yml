@@ -1,9 +1,18 @@
 # Silver pipeline (TRIMMED).
 #
-# gtm_events (raw Delta) -> event_view_item + event_add_to_cart ONLY.
+# Two source flows, all as streaming tables:
+#   gtm_events (raw Delta) -> event_view_item + event_add_to_cart.
+#   datasheet PDFs (raw_docs Volume) --IDP-->
+#     _parsed_datasheets -> _extracted_specs -> product_specs.
 # All other silver tables (purchase / pageview / abandon / signup) and every
 # gold cart MV + gold_customer_360 have been removed from this pipeline: the
 # demo funnel is view -> cart, and the money fact comes from Lakebase.
+#
+# IDP moved INTO this pipeline (was a standalone warehouse SQL task in
+# job_build.yml). It is now three streaming tables (parse -> typed extract ->
+# explode) that mirror the event tables' local style. product_specs is keyed by
+# source_path + model_name (it no longer joins dim_product / carries product_id),
+# so IDP no longer depends on the curate chain.
 resources:
   pipelines:
     powertools_silver:
@@ -17,6 +26,12 @@ resources:
             path: ../pipelines/silver/transformations/event_view_item.sql
         - file:
             path: ../pipelines/silver/transformations/event_add_to_cart.sql
+        - file:
+            path: ../pipelines/silver/transformations/idp_parsed_datasheets.sql
+        - file:
+            path: ../pipelines/silver/transformations/idp_extracted_specs.sql
+        - file:
+            path: ../pipelines/silver/transformations/product_specs.sql
 
 # The silver pipeline is run as the `run_silver_pipeline` task inside the
 # powertools-build orchestration job (../resources/job_build.yml), so the

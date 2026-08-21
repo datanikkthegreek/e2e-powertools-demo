@@ -8,7 +8,8 @@
 # connect, NOT as bundle resources):
 #   products (NO specs), accounts, carts, cart_items, purchases, purchase_lines
 # Specs are deliberately excluded — they are produced by IDP into product_specs
-# (see idp_product_specs.sql).
+# (the IDP streaming tables in the silver pipeline; see
+# ../pipelines/silver/transformations/product_specs.sql).
 resources:
   # The Unity Catalog schema that owns every table/volume this bundle creates.
   # Declared here so `bundle deploy` provisions it (and orders it before the

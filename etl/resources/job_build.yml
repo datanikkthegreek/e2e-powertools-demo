@@ -55,7 +55,11 @@ resources:
               - "--weeks=6"
               - "--users=100"
 
-        # (d) silver pipeline: gtm_events -> event_view_item + event_add_to_cart.
+        # (d) silver pipeline: gtm_events -> event_view_item + event_add_to_cart,
+        #     AND datasheet PDFs -> product_specs (IDP: _parsed_datasheets ->
+        #     _extracted_specs -> product_specs, three streaming tables). IDP moved
+        #     in here from a standalone warehouse SQL task; product_specs no longer
+        #     joins dim_product, so it does not depend on the curate chain below.
         - task_key: run_silver_pipeline
           depends_on:
             - task_key: seed_gtm_events
@@ -80,15 +84,6 @@ resources:
             warehouse_id: ${var.warehouse_id}
             file:
               path: ../src/key_normalize.sql
-
-        # (e.3) datasheet PDFs -> product_specs (needs dim_product from cdc_to_current).
-        - task_key: idp_product_specs
-          depends_on:
-            - task_key: key_normalize
-          sql_task:
-            warehouse_id: ${var.warehouse_id}
-            file:
-              path: ../src/idp_product_specs.sql
       environments:
         - environment_key: default
           spec:

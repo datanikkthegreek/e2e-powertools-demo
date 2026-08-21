@@ -9,7 +9,8 @@ bundle:
 #     --collapse--> dim_* / fact_* (current state)
 #   gtm_events (raw) --silver--> event_view_item + event_add_to_cart
 #     --key-normalize--> fact_view_item / fact_add_to_cart
-#   datasheet PDFs --IDP--> product_specs
+#   datasheet PDFs --IDP (silver pipeline)--> _parsed_datasheets
+#     --> _extracted_specs --> product_specs (typed, not keyed to dim_product)
 #
 # Everything lands in catalog nikks_fevm_workspace_7405607030687545,
 # schema techsummit. See ../README.md for the full deploy order.
