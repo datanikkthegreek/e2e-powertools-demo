@@ -1,0 +1,94 @@
+# Build job — the single orchestration DAG that turns raw sources into the 7
+# base tables Genie consumes. One job so the ordering is a real, enforced
+# task dependency graph rather than a hope expressed in the RUNBOOK.
+#
+# Full pipeline order (see ../../RUNBOOK.md):
+#   (a) provision Lakebase + seed OLTP  — done by deploying etl/ then the app/
+#       bundle; the webshop seeds products/accounts/carts/purchases into
+#       Lakebase on first connect. External to this job.
+#   (b) CDC sync Lakebase -> Delta       — the continuous `synced_database_tables`
+#       in ../resources/sync.yml; produces lb_*_history. External to this job
+#       (a continuous resource can't be a job task), and a PREREQUISITE of it:
+#       both seed_gtm_events (reads lb_products_history) and cdc_to_current
+#       (reads all lb_*_history) need it populated first. The `wait_for_cdc`
+#       gate task below enforces that readiness before any data task runs.
+#   wait_for_cdc (gate) -> (c) GTM behavior seed -> (d) silver pipeline ->
+#       (e) curate are the tasks below, chained so each runs strictly after the
+#       last.
+resources:
+  jobs:
+    powertools_build:
+      name: "powertools-build"
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
+        - name: volume
+          default: ${var.volume}
+      tasks:
+        # (b-gate) CDC readiness gate. The continuous wal2delta sync (b) is not a
+        #     task in this job, so this first task POLLS until all four
+        #     lb_*_history change-logs exist AND are populated before anything
+        #     downstream reads them — failing loudly on timeout rather than
+        #     building empty Genie tables.
+        - task_key: wait_for_cdc
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/wait_for_cdc.py
+            parameters:
+              - "--catalog=${var.catalog}"
+              - "--schema=${var.schema}"
+
+        # (c) GTM behavior seed -> gtm_events. Reads lb_products_history, so the
+        #     CDC sync (b) must already be populated — gated by wait_for_cdc.
+        - task_key: seed_gtm_events
+          depends_on:
+            - task_key: wait_for_cdc
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/seed_gtm_events.py
+            parameters:
+              - "--catalog=${var.catalog}"
+              - "--schema=${var.schema}"
+              - "--weeks=6"
+              - "--users=100"
+
+        # (d) silver pipeline: gtm_events -> event_view_item + event_add_to_cart.
+        - task_key: run_silver_pipeline
+          depends_on:
+            - task_key: seed_gtm_events
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.powertools_silver.id}
+            full_refresh: false
+
+        # (e.1) CDC history -> dim_product / dim_customer / fact_purchase(_line).
+        - task_key: cdc_to_current
+          depends_on:
+            - task_key: run_silver_pipeline
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/cdc_to_current.sql
+
+        # (e.2) event_* silver -> fact_view_item / fact_add_to_cart (id-normalized).
+        - task_key: key_normalize
+          depends_on:
+            - task_key: cdc_to_current
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/key_normalize.sql
+
+        # (e.3) datasheet PDFs -> product_specs (needs dim_product from cdc_to_current).
+        - task_key: idp_product_specs
+          depends_on:
+            - task_key: key_normalize
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/idp_product_specs.sql
+      environments:
+        - environment_key: default
+          spec:
+            client: "3"

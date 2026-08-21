@@ -1,0 +1,26 @@
+# App bundle resource: the Bosch Power Tools webshop Databricks App.
+#
+# It connects to the techsummit Lakebase (Postgres) OLTP database that the
+# etl/ bundle provisions. Runtime configuration (command + env, including the
+# LAKEBASE_PROJECT_ID=techsummit coordinates) lives in ../app.yml, which
+# `apx build` copies into ./.build (the source_code_path below).
+resources:
+  apps:
+    powertools-webshop-app:
+      name: "powertools-webshop"
+      description: "Bosch Power Tools webshop — Databricks App on the techsummit Lakebase project."
+      source_code_path: ../.build
+      # OBO user scopes: the app connects to Lakebase as the signed-in user
+      # (X-Forwarded-Access-Token), so the forwarded token needs the postgres
+      # (Lakebase endpoint/credential) and sql scopes.
+      user_api_scopes:
+        - postgres
+        - sql
+      resources:
+        # Zerobus OAuth client secret, injected as an env var via valueFrom
+        # in ../app.yml (keeps the plaintext secret out of source control).
+        - name: "zerobus-client-secret"
+          secret:
+            scope: "cdp_demo"
+            key: "zerobus_client_secret"
+            permission: "READ"

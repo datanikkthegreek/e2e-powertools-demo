@@ -1,0 +1,30 @@
+# Silver pipeline (TRIMMED).
+#
+# gtm_events (raw Delta) -> event_view_item + event_add_to_cart ONLY.
+# All other silver tables (purchase / pageview / abandon / signup) and every
+# gold cart MV + gold_customer_360 have been removed from this pipeline: the
+# demo funnel is view -> cart, and the money fact comes from Lakebase.
+resources:
+  pipelines:
+    powertools_silver:
+      name: "powertools-silver-${bundle.target}"
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      channel: "PREVIEW"
+      configuration:
+        pipeline.table_catalog: ${var.catalog}
+        pipeline.table_schema: ${var.schema}
+      libraries:
+        - file:
+            path: ../pipelines/silver/transformations/_shared.py
+        - file:
+            path: ../pipelines/silver/transformations/event_view_item.py
+        - file:
+            path: ../pipelines/silver/transformations/event_add_to_cart.py
+
+# The silver pipeline is run as the `run_silver_pipeline` task inside the
+# powertools-build orchestration job (../resources/job_build.yml), so the
+# seed -> silver -> curate order is a single enforced DAG. There is no
+# standalone "run pipeline" job: the app's Analytics page (its only caller)
+# has been removed.

@@ -1,0 +1,43 @@
+bundle:
+  name: "powertools-etl"
+
+# BUNDLE 2 — ETL + Lakebase for the Bosch Power Tools demo.
+#
+# DEPLOY THIS FIRST. It owns the techsummit Lakebase project (the OLTP source
+# the webshop App connects to) and the Delta data flow that feeds Genie:
+#   Lakebase (products/accounts/carts/purchases) --wal2delta--> lb_*_history
+#     --collapse--> dim_* / fact_* (current state)
+#   gtm_events (raw) --silver--> event_view_item + event_add_to_cart
+#     --key-normalize--> fact_view_item / fact_add_to_cart
+#   datasheet PDFs --IDP--> product_specs
+#
+# Everything lands in catalog nikks_fevm_workspace_7405607030687545,
+# schema techsummit. See ../README.md for the full deploy order.
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: "Unity Catalog catalog for all powertools demo tables."
+    default: "nikks_fevm_workspace_7405607030687545"
+  schema:
+    description: "Unity Catalog schema (isolated from the baseline `cdp` demo)."
+    default: "techsummit"
+  lakebase_project:
+    description: "Lakebase (Postgres) OLTP project name."
+    default: "techsummit"
+  volume:
+    description: "Volume holding the raw datasheet/manual PDFs for IDP + KA."
+    default: "raw_docs"
+  warehouse_id:
+    description: "SQL warehouse used by the curate (SQL) tasks."
+    default: "32a24efbd454bd06"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-7405607030687545.5.azuredatabricks.net
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

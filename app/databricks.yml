@@ -1,0 +1,25 @@
+bundle:
+  name: "powertools-webshop"
+
+# BUNDLE 1 — Databricks App (Bosch Power Tools webshop) on the techsummit
+# Lakebase project. Deploy this AFTER the etl/ bundle: the app references the
+# Lakebase instance that the ETL bundle provisions (see ../README.md).
+
+include:
+  - resources/*.yml
+
+sync:
+  include:
+    - .build
+
+artifacts:
+  default:
+    build: apx build
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-7405607030687545.5.azuredatabricks.net
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
