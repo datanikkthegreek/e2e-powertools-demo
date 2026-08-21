@@ -43,7 +43,7 @@ targets:
     # "[dev <user>] " to resource names, which for a UC *schema* becomes part
     # of the schema name (dev_<user>_techsummit) and cannot be reliably nulled
     # (an empty name_prefix preset merges as "unset"). Every object here (silver
-    # pipeline, CDC synced tables, curate SQL tasks, the hard-coded IDP Volume
+    # pipeline, CDF history tables, curate SQL tasks, the hard-coded IDP Volume
     # path, and the webshop App) targets the bare `techsummit` schema/project,
     # so any prefix would split the demo across two schemas. Deploying without a
     # mode keeps every name canonical.

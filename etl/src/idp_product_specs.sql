@@ -61,15 +61,20 @@ WHERE dp.name IN (
 );
 
 -- 3) product_specs: typed numeric columns, joined to product_id.
+--    ai_extract returns values WITH units ("2.7 Nm", "18 V", "1800 rpm"), so a
+--    plain CAST(... AS DOUBLE) throws CAST_INVALID_INPUT. Pull the leading
+--    numeric token out with regexp_extract and try_cast it (NULL on no match)
+--    so battery/charger rows that legitimately lack torque/rpm stay NULL rather
+--    than failing the whole job.
 CREATE OR REPLACE TABLE product_specs AS
 SELECT
   x.product_id,
   e.model_name,
-  CAST(e.voltage_v          AS DOUBLE) AS voltage_v,
-  CAST(e.max_torque_nm      AS DOUBLE) AS max_torque_nm,
-  CAST(e.no_load_rpm        AS INT)    AS no_load_rpm,
-  CAST(e.chuck_capacity_mm  AS DOUBLE) AS chuck_capacity_mm,
-  CAST(e.weight_kg          AS DOUBLE) AS weight_kg,
+  try_cast(regexp_extract(CAST(e.voltage_v         AS STRING), '[-+]?[0-9]*\\.?[0-9]+', 0) AS DOUBLE) AS voltage_v,
+  try_cast(regexp_extract(CAST(e.max_torque_nm     AS STRING), '[-+]?[0-9]*\\.?[0-9]+', 0) AS DOUBLE) AS max_torque_nm,
+  try_cast(regexp_extract(CAST(e.no_load_rpm       AS STRING), '[0-9]+', 0)                AS INT)    AS no_load_rpm,
+  try_cast(regexp_extract(CAST(e.chuck_capacity_mm AS STRING), '[-+]?[0-9]*\\.?[0-9]+', 0) AS DOUBLE) AS chuck_capacity_mm,
+  try_cast(regexp_extract(CAST(e.weight_kg         AS STRING), '[-+]?[0-9]*\\.?[0-9]+', 0) AS DOUBLE) AS weight_kg,
   e.battery_platform
 FROM _extracted_specs e
 JOIN _model_crosswalk x

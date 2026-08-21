@@ -207,8 +207,16 @@ def main() -> None:
     p.add_argument("--project", default="techsummit")
     p.add_argument("--n-purchases", type=int, default=10)
     p.add_argument("--seed", type=int, default=42)
+    # Fixed UTC base epoch so a given --seed produces byte-identical timestamps
+    # on every clean run (datetime.now() would make the dataset non-deterministic
+    # across runs even with the same seed). Override only if you need a different
+    # anchor. All cart/purchase times are this base minus seeded offsets.
+    p.add_argument("--base-time", default="2026-08-01T00:00:00+00:00")
     args = p.parse_args()
     rng = random.Random(args.seed)
+    base_time = datetime.fromisoformat(args.base_time)
+    if base_time.tzinfo is None:
+        base_time = base_time.replace(tzinfo=timezone.utc)
 
     conn = _connect(args.profile, args.project)
     conn.autocommit = False
@@ -266,7 +274,8 @@ def main() -> None:
         )
 
     # --- carts + purchases + lines ---
-    now = datetime.now(timezone.utc)
+    # Deterministic: anchor on the fixed base epoch, not wall-clock now.
+    now = base_time
     prod_list = list(product_ids.items())  # (name, id)
     prod_price = {name: price for name, _, price in BOSCH_TOOLS}
 
