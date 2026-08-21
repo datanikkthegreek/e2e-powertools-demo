@@ -24,7 +24,8 @@ one produced. Run it in exactly this order:
      **Lakebase CDF** tab > **Start**. Map source DB `databricks_postgres`,
      schema `public` → destination catalog `${var.catalog}` (whatever the
      deployed bundle target resolves it to — for the current FEVM target that
-     is `nikks_fevm_workspace_7405607030687545`), schema `techsummit`.
+     is `nikks_fevm_workspace_7405607030687545`), schema `${var.schema}`
+     (`techsummit` on the current FEVM target).
    - CDF snapshots + streams every `public` table into
      `lb_<table>_history` Delta tables (~15s batches). Wait until
      `lb_products_history`, `lb_accounts_history`, `lb_purchases_history`,
