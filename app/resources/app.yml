@@ -16,7 +16,8 @@ resources:
       # endpoint, which needs no extra scope. We therefore declare no
       # user_api_scopes (the `postgres` OBO scope is also disallowed in this
       # workspace). The app SP is instead granted a Postgres role on the
-      # techsummit Lakebase project post-deploy (see README / RUNBOOK).
+      # techsummit Lakebase project post-deploy (see the "Deploying the Bosch
+      # Power Tools webshop onto the techsummit Lakebase" section in ./README.md).
       resources:
         # Zerobus OAuth client secret, injected as an env var via valueFrom
         # in ../app.yml (keeps the plaintext secret out of source control).
