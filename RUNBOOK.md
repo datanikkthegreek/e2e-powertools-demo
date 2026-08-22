@@ -32,12 +32,22 @@ one produced. Run it in exactly this order:
      `lb_purchase_lines_history` have rows. *(b) — must precede step 5: both the
      GTM seed and `cdc_to_current` read the `lb_*_history` tables.*
 4. **Upload PDFs.** Real Bosch **datasheet** PDFs to
-   `…techsummit.raw_docs/datasheets` (needed by the IDP step inside the build
-   job). Manuals are a Phase-2 concern.
+   `…techsummit.raw_docs/datasheets` (the IDP streaming tables in the silver
+   pipeline read them). Manuals are a Phase-2 concern.
 5. **Run `powertools-build`.** One job, one enforced DAG:
    `wait_for_cdc` (gate) → `seed_gtm_events` (c) → `run_silver_pipeline` (d) →
-   `cdc_to_current` → `key_normalize` → `idp_product_specs` (e).
+   `cdc_to_current` → `key_normalize` (e).
+   The silver pipeline (d) also runs IDP (datasheet PDFs → `product_specs`) as
+   three streaming tables; IDP no longer depends on the curate chain because
+   `product_specs` is no longer keyed to `dim_product`.
    This builds the 7 Genie base tables.
+   > **IDP reprocessing:** the IDP stages are streaming and `ai_extract` is
+   > pinned to `version 2.0`. Changing an IDP prompt/schema/version does **not**
+   > re-run it over datasheets already consumed — do a **full refresh** of the
+   > three IDP streaming tables to re-extract
+   > (`databricks bundle run powertools_silver --full-refresh _parsed_datasheets,_extracted_specs,product_specs -p FEVM`).
+   > A full refresh recomputes the event tables from the existing `gtm_events`
+   > (it does **not** re-run `seed_gtm_events`), so the funnel counts stay put.
 6. **Build (UI):** Knowledge Assistant (manuals), Genie space (7 base tables),
    Supervisor agent (Genie + Knowledge Assistant).
 
@@ -45,8 +55,9 @@ one produced. Run it in exactly this order:
 
 1. **Webshop** — browse, add a tool to cart, buy it. "Real app on Databricks,
    backed by Lakebase."
-2. **IDP** — run `idp_product_specs.sql` on a datasheet: PDF → typed
-   `product_specs`. "The app doesn't even store these specs."
+2. **IDP** — the silver pipeline's IDP streaming tables turn a datasheet PDF
+   into typed `product_specs` (parse → typed `ai_extract` → explode). "The app
+   doesn't even store these specs."
 3. **Knowledge Assistant** — a usage question + a repair question; cited answers.
 4. **Genie** — "view → cart → purchase conversion by category"; "revenue by
    product last month".

@@ -36,17 +36,19 @@ e2e-powertools-demo/
     databricks.yml
     resources/
       lakebase.yml           # Lakebase project 'techsummit' (pg17) + raw_docs Volume + CDF setup notes
-      pipeline_silver.yml    # gtm_events -> event_view_item + event_add_to_cart ONLY
-      job_build.yml          # one DAG: seed_gtm -> silver -> cdc_to_current -> key_normalize -> idp
+      pipeline_silver.yml    # gtm_events -> event_* AND datasheet PDFs -> product_specs (IDP)
+      job_build.yml          # one DAG: seed_gtm -> silver(+IDP) -> cdc_to_current -> key_normalize
     pipelines/silver/transformations/
       event_view_item.sql    # STREAMING TABLE: STREAM(gtm_events) -> view_item
       event_add_to_cart.sql  # STREAMING TABLE: STREAM(gtm_events) -> add_to_cart
+      idp_parsed_datasheets.sql # STREAMING TABLE: STREAM read_files(PDFs) -> ai_parse_document
+      idp_extracted_specs.sql   # STREAMING TABLE: ai_extract (typed schema) -> specs ARRAY<STRUCT>
+      product_specs.sql         # STREAMING TABLE: explode specs -> typed product_specs (no product_id)
     src/
       seed_gtm_events.py     # behavior seed (view/cart focus)
       seed_lakebase_oltp.py  # seed OLTP + set REPLICA IDENTITY FULL (CDF prereq)
       cdc_to_current.sql     # lb_*_history (CDF) -> dim_product / dim_customer / fact_purchase(_line)
       key_normalize.sql      # item_id -> product_id -> fact_view_item / fact_add_to_cart
-      idp_product_specs.sql  # ai_parse_document + ai_extract -> product_specs (+ crosswalk)
     data/
       datasheets/            # (empty, .gitkeep) real Bosch datasheet PDFs — added later
       manuals/               # (empty, .gitkeep) real Bosch manuals — added later
@@ -97,11 +99,17 @@ review base). Everything below is the trim, on the feature branch:
   (`models.py`), the seed (`seed.py`), the spec detail (`_product_details.py`,
   which now keeps only `long_description`), and the app UI (the "Specifications"
   card in the product page + the `specs` field in `api.ts`).
-- Specs are produced fresh by IDP into `product_specs` (`idp_product_specs.sql`).
+- Specs are produced fresh by IDP into `product_specs`, now three streaming
+  tables inside the silver pipeline (`idp_parsed_datasheets.sql` →
+  `idp_extracted_specs.sql` → `product_specs.sql`): `ai_parse_document` →
+  typed `ai_extract` (structured output, no regex) → explode. `product_specs`
+  is keyed by `source_path` + `model_name` and is **not** joined to
+  `dim_product` (no `product_id` column).
 
 **Delta side trimmed to only the required tables**
-- Kept `gtm_events` (raw) and only the `event_view_item` + `event_add_to_cart`
-  silver transforms.
+- Kept `gtm_events` (raw) and the `event_view_item` + `event_add_to_cart`
+  silver transforms, plus the IDP chain (`_parsed_datasheets` →
+  `_extracted_specs` → `product_specs`) which also lives in the silver pipeline.
 - Removed the purchase / pageview / abandon / signup silver tables, the email
   sinks, all gold cart MVs, and `gold_customer_360` from the pipeline.
 
