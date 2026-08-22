@@ -4,15 +4,13 @@
 -- full AUTO CDC + preimage-filter + binary-UUID rationale). The engine collapses
 -- lb_accounts_history to current state via AUTO CDC INTO — no ROW_NUMBER, no
 -- manual _rn/delete filtering. signup_date is a literal NULL DATE (accounts carry
--- no signup timestamp).
--- Bare names resolve in the pipeline's configured catalog/schema.
+-- no signup timestamp). The binary id is normalized via the centralized
+-- canonical_uuid(BINARY) UC function (see dim_product.sql / create_canonical_uuid.sql).
+-- The call is BARE: the function lives in <catalog>.default, which is on SDP's
+-- function search path — see dim_product.sql for the full note.
 CREATE TEMPORARY VIEW _accounts_changes AS
 SELECT
-  CASE WHEN typeof(id) = 'binary'
-       THEN lower(regexp_replace(hex(id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(id AS STRING)) END  AS customer_id,
+  canonical_uuid(id)           AS customer_id,
   city,
   country,
   CAST(NULL AS DATE)            AS signup_date,

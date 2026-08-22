@@ -12,30 +12,21 @@
 -- CDC-correctness bug: two lines of the same product in one purchase would
 -- collapse last-writer-wins, and a delete of one line would delete the shared
 -- target row. We therefore key on the line `id` (binary, like every other CDF
--- id — normalized with the same load-bearing hex->hyphenate->lower CASE).
+-- id — normalized via the centralized canonical_uuid(BINARY) UC function).
 --
 -- AUTO CDC requires its KEYS columns to exist in the target, so the normalized
 -- line id is exposed as an ADDITIVE column `purchase_line_id`. Nothing but Genie
 -- consumes this table and an extra identity column is harmless; the other
 -- projected columns (purchase_id, product_id, quantity, unit_price_eur, name_snapshot) are
--- unchanged. Bare names resolve in the pipeline's configured catalog/schema.
+-- unchanged. All three binary ids go through canonical_uuid() (see dim_product.sql
+-- / create_canonical_uuid.sql). The calls are BARE: the function lives in
+-- <catalog>.default, which is on SDP's function search path — see dim_product.sql
+-- for the full note.
 CREATE TEMPORARY VIEW _purchase_lines_changes AS
 SELECT
-  CASE WHEN typeof(id) = 'binary'
-       THEN lower(regexp_replace(hex(id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(id AS STRING)) END           AS purchase_line_id,
-  CASE WHEN typeof(purchase_id) = 'binary'
-       THEN lower(regexp_replace(hex(purchase_id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(purchase_id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(purchase_id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(purchase_id AS STRING)) END  AS purchase_id,
-  CASE WHEN typeof(product_id) = 'binary'
-       THEN lower(regexp_replace(hex(product_id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(product_id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(product_id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(product_id AS STRING)) END   AS product_id,
+  canonical_uuid(id)           AS purchase_line_id,
+  canonical_uuid(purchase_id)  AS purchase_id,
+  canonical_uuid(product_id)   AS product_id,
   quantity,
   unit_price_eur,
   name_snapshot,

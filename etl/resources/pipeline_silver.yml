@@ -16,8 +16,10 @@
 # per key by _sort_by, APPLY AS DELETE on 'delete') — no ROW_NUMBER, no manual
 # _rn/delete filtering. An intermediate streaming temp view per table projects/
 # normalizes the columns and drops update_preimage rows before the flow. The
-# binary-UUID normalization CASE is retained on this OLTP side because Lakebase
-# CDF renders the Postgres UUIDs as binary (verified live) — see dim_product.sql.
+# binary-UUID normalization is centralized in the canonical_uuid(BINARY) UC
+# function (created by the create_canonical_uuid job task before this pipeline
+# runs) because Lakebase CDF renders the Postgres UUIDs as binary (verified live)
+# — see dim_product.sql / create_canonical_uuid.sql.
 #
 # IDP moved INTO this pipeline too. It is three streaming tables (parse -> typed
 # extract -> explode) that mirror the event tables' local style. product_specs is

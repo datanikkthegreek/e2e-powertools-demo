@@ -3,26 +3,16 @@
 -- Same native-merge pattern as dim_product.sql (read that file's header for the
 -- full AUTO CDC + preimage-filter + binary-UUID rationale). Three id columns
 -- (id -> purchase_id, account_id -> customer_id, cart_id) are each binary and
--- normalized with the same load-bearing CASE. created_at + total_eur are the
+-- normalized via the centralized canonical_uuid(BINARY) UC function (see
+-- dim_product.sql / create_canonical_uuid.sql). created_at + total_eur are the
 -- money columns, carried through unchanged.
--- Bare names resolve in the pipeline's configured catalog/schema.
+-- The calls are BARE: the function lives in <catalog>.default, which is on SDP's
+-- function search path — see dim_product.sql for the note.
 CREATE TEMPORARY VIEW _purchases_changes AS
 SELECT
-  CASE WHEN typeof(id) = 'binary'
-       THEN lower(regexp_replace(hex(id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(id AS STRING)) END          AS purchase_id,
-  CASE WHEN typeof(account_id) = 'binary'
-       THEN lower(regexp_replace(hex(account_id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(account_id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(account_id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(account_id AS STRING)) END  AS customer_id,
-  CASE WHEN typeof(cart_id) = 'binary'
-       THEN lower(regexp_replace(hex(cart_id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(cart_id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(cart_id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(cart_id AS STRING)) END      AS cart_id,
+  canonical_uuid(id)           AS purchase_id,
+  canonical_uuid(account_id)   AS customer_id,
+  canonical_uuid(cart_id)      AS cart_id,
   created_at,
   total_eur,
   _pg_change_type,

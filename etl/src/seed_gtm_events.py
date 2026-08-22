@@ -102,24 +102,20 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
             # Lakebase id to canonical lowercase hyphenated UUID text HERE, before
             # serializing it into gtm_events, so item_id == dim_product.product_id.
             # The Lakebase id is BINARY (Lakebase CDF renders the Postgres UUID as
-            # raw binary; verified live 2026-08-22), so the binary branch is
+            # raw binary; verified live 2026-08-22), so this normalization is
             # LOAD-BEARING — a plain .cast("string") on a binary id is garbage and
-            # would silently break the join. The full CASE is retained (identical
-            # to the silver AUTO CDC flows in dim_product.sql etc.):
-            #   1. binary                -> hex(id) [32 chars] -> hyphenate 8-4-4-4-12 -> lower
-            #   2. string ^[0-9a-f]{32}$ -> hyphenate 8-4-4-4-12 -> lower   (case-insensitive)
-            #   3. else                  -> lower(CAST(id AS STRING))
-            # The BEHAVIORAL read-back side (etl/src/key_normalize.sql) then sees
-            # item_id already as canonical lowercase text, so it uses the simple
-            # lower(CAST(...)) form — the regex there was proven dead weight.
-            F.expr(
-                "CASE "
-                "WHEN typeof(id) = 'binary' "
-                "THEN lower(regexp_replace(hex(id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5')) "
-                "WHEN lower(CAST(id AS STRING)) RLIKE '^[0-9a-f]{32}$' "
-                "THEN lower(regexp_replace(CAST(id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5')) "
-                "ELSE lower(CAST(id AS STRING)) END"
-            ).alias("product_id"),
+            # would silently break the join. The transform is centralized in the
+            # canonical_uuid(BINARY) UC function (etl/src/create_canonical_uuid.sql,
+            # created by the create_canonical_uuid job task before this seed runs),
+            # the same function the silver AUTO CDC flows call. It lives in the
+            # catalog's `default` schema and is fully qualified here (the seed runs
+            # on a generic cluster with no default schema set). The BINARY-typed
+            # parameter documents intent, though SQL may apply an implicit cast, so
+            # it is a guard not an absolute guarantee. The BEHAVIORAL read-back side
+            # (etl/src/key_normalize.sql) then sees item_id already as canonical
+            # lowercase text, so it uses the simple lower(CAST(...)) form — the
+            # regex there was proven dead weight.
+            F.expr(f"{catalog}.default.canonical_uuid(id)").alias("product_id"),
             F.col("name"),
             F.col("price_eur"),
         )

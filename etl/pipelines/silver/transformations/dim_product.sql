@@ -14,25 +14,27 @@
 --   2. AUTO CDC flow    : KEYS(product_id), SEQUENCE BY _sort_by (CDF's monotonic
 --      order key, never ties), APPLY AS DELETE WHEN _pg_change_type='delete'.
 --
--- UUID NORMALIZATION — the binary branch is LOAD-BEARING here (NOT removable).
+-- UUID NORMALIZATION — LOAD-BEARING, centralized in canonical_uuid(BINARY).
 --   Verified live 2026-08-22: typeof(id) in every lb_*_history table is 'binary'
 --   (Lakebase CDF renders the Postgres UUID as raw binary). CAST(binary AS STRING)
 --   yields garbage bytes, so the id MUST go hex(id) -> hyphenate 8-4-4-4-12 ->
 --   lower to become the canonical UUID text that the behavioral funnel joins on.
---   The full 3-branch CASE below yields the canonical UUID text, so
---   dim_product.product_id equals fact_view_item/fact_add_to_cart.product_id.
---   The behavioral
---   side (key_normalize.sql) sees item_id already as canonical lowercase text,
---   so it uses the simple lower(CAST(...)) form — see that file's note.
--- Bare names resolve in the pipeline's configured catalog/schema (see
--- etl/resources/pipeline_silver.yml), matching the event/IDP tables.
+--   That transform now lives in ONE place — the canonical_uuid() UC function
+--   (etl/src/create_canonical_uuid.sql, created by the create_canonical_uuid job
+--   task before this pipeline runs) — so dim_product.product_id equals
+--   fact_view_item/fact_add_to_cart.product_id. The BINARY-typed parameter
+--   documents intent and catches an obviously-wrong argument, though SQL may still
+--   apply an implicit cast, so it is a guard rather than an absolute guarantee.
+--   The behavioral side (key_normalize.sql) sees item_id already as canonical
+--   lowercase text, so it uses the simple lower(CAST(...)) form — see that note.
+-- The call is BARE (canonical_uuid). The function lives in the catalog's `default`
+-- schema (etl/src/create_canonical_uuid.sql) and SDP's function search path
+-- includes <catalog>.default, so a bare call resolves there (verified live
+-- 2026-08-22). Keeping it in default, not techsummit, is what honors the bundle
+-- target/schema override: the catalog follows the target and no schema is pinned.
 CREATE TEMPORARY VIEW _products_changes AS
 SELECT
-  CASE WHEN typeof(id) = 'binary'
-       THEN lower(regexp_replace(hex(id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(id AS STRING)) END  AS product_id,
+  canonical_uuid(id)            AS product_id,
   name,
   description                   AS category,
   price_eur,

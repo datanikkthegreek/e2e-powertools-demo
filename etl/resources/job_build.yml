@@ -13,11 +13,17 @@
 #       and the silver pipeline's AUTO CDC flows (read all lb_*_history) need it
 #       populated first. The `wait_for_cdc` gate task below enforces that
 #       readiness before any data task runs.
-#   wait_for_cdc (gate) -> (c) GTM behavior seed -> (d) silver pipeline ->
-#       (e) key_normalize are the tasks below, chained so each runs strictly
-#       after the last. The CDC current-state collapse (dim_*/fact_*) is no
-#       longer a separate task — it is now native AUTO CDC inside the silver
-#       pipeline (d).
+#   wait_for_cdc (gate) + create_canonical_uuid (UC function) -> (c) GTM behavior
+#       seed -> (d) silver pipeline -> (e) key_normalize are the tasks below,
+#       chained so each runs strictly after the last. The CDC current-state
+#       collapse (dim_*/fact_*) is no longer a separate task — it is now native
+#       AUTO CDC inside the silver pipeline (d). The binary-UUID normalization is
+#       centralized in the canonical_uuid(BINARY) UC function; create_canonical_uuid
+#       has no dependency, so it runs CONCURRENTLY with wait_for_cdc but always
+#       COMPLETES BEFORE its consumers — the seed (which normalizes binary ids) and
+#       the pipeline (whose AUTO CDC flows call it) — because both depend on it.
+#       SDP does not track UC-function dependencies and DABs has no function
+#       resource type, so this pre-pipeline task is the guarantee.
 resources:
   jobs:
     powertools_build:
@@ -43,11 +49,32 @@ resources:
               - "--catalog=${var.catalog}"
               - "--schema=${var.schema}"
 
+        # (b-fn) Create the canonical_uuid(BINARY) UC function in <catalog>.default
+        #     — the single source of truth for the Lakebase-CDF binary-UUID ->
+        #     canonical-text transform. Has no dependency, so it runs concurrently
+        #     with wait_for_cdc but always completes before its consumers —
+        #     seed_gtm_events (normalizes binary product ids) and the silver
+        #     pipeline (its AUTO CDC flows call the function) — since both depend on
+        #     it. SDP does not track UC-function dependencies and DABs has no
+        #     function resource type, so this task is how the function is guaranteed
+        #     to exist at pipeline analysis time. It lives in `default` (not
+        #     techsummit) so the pipeline's bare canonical_uuid() call resolves via
+        #     SDP's <catalog>.default search path while the catalog still follows
+        #     the bundle target.
+        - task_key: create_canonical_uuid
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/create_canonical_uuid.sql
+
         # (c) GTM behavior seed -> gtm_events. Reads lb_products_history, so the
-        #     CDC sync (b) must already be populated — gated by wait_for_cdc.
+        #     CDC sync (b) must already be populated — gated by wait_for_cdc. Also
+        #     depends on create_canonical_uuid: the seed normalizes the binary
+        #     product ids via the same function.
         - task_key: seed_gtm_events
           depends_on:
             - task_key: wait_for_cdc
+            - task_key: create_canonical_uuid
           environment_key: default
           spark_python_task:
             python_file: ../src/seed_gtm_events.py
