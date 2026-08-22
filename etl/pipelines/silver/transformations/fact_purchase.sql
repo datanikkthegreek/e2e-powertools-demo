@@ -4,7 +4,7 @@
 -- full AUTO CDC + preimage-filter + binary-UUID rationale). Three id columns
 -- (id -> purchase_id, account_id -> customer_id, cart_id) are each binary and
 -- normalized with the same load-bearing CASE. created_at + total_eur are the
--- money columns, carried through unchanged from the retired cdc_to_current.sql.
+-- money columns, carried through unchanged.
 -- Bare names resolve in the pipeline's configured catalog/schema.
 CREATE TEMPORARY VIEW _purchases_changes AS
 SELECT

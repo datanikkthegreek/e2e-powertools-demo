@@ -10,9 +10,8 @@
 # gold_customer_360 have been removed from this pipeline: the demo funnel is
 # view -> cart, and the money fact comes from Lakebase.
 #
-# CDC moved INTO this pipeline (was the standalone warehouse SQL task
-# etl/src/cdc_to_current.sql in job_build.yml). Each of the four current-state
-# tables is now a streaming table fed by a native AUTO CDC INTO flow from
+# CDC runs INSIDE this pipeline. Each of the four current-state
+# tables is a streaming table fed by a native AUTO CDC INTO flow from
 # STREAM(lb_*_history): the engine does the merge/collapse (keep latest change
 # per key by _sort_by, APPLY AS DELETE on 'delete') — no ROW_NUMBER, no manual
 # _rn/delete filtering. An intermediate streaming temp view per table projects/

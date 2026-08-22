@@ -15,10 +15,9 @@
 -- id — normalized with the same load-bearing hex->hyphenate->lower CASE).
 --
 -- AUTO CDC requires its KEYS columns to exist in the target, so the normalized
--- line id is exposed as an ADDITIVE column `purchase_line_id`. The retired
--- cdc_to_current.sql dropped the line id, but nothing but Genie consumes this
--- table and an extra identity column is harmless; the previously projected
--- columns (purchase_id, product_id, quantity, unit_price_eur, name_snapshot) are
+-- line id is exposed as an ADDITIVE column `purchase_line_id`. Nothing but Genie
+-- consumes this table and an extra identity column is harmless; the other
+-- projected columns (purchase_id, product_id, quantity, unit_price_eur, name_snapshot) are
 -- unchanged. Bare names resolve in the pipeline's configured catalog/schema.
 CREATE TEMPORARY VIEW _purchase_lines_changes AS
 SELECT
