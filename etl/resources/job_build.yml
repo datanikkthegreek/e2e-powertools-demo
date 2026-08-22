@@ -10,12 +10,14 @@
 #       (see ../resources/lakebase.yml); produces lb_*_history in UC, batched
 #       ~every 15s. Enabled + started outside the bundle (UI, one-time), and a
 #       PREREQUISITE of this job: both seed_gtm_events (reads lb_products_history)
-#       and cdc_to_current (reads all lb_*_history) need it populated first. The
-#       `wait_for_cdc` gate task below enforces that readiness before any data
-#       task runs.
+#       and the silver pipeline's AUTO CDC flows (read all lb_*_history) need it
+#       populated first. The `wait_for_cdc` gate task below enforces that
+#       readiness before any data task runs.
 #   wait_for_cdc (gate) -> (c) GTM behavior seed -> (d) silver pipeline ->
-#       (e) curate are the tasks below, chained so each runs strictly after the
-#       last.
+#       (e) key_normalize are the tasks below, chained so each runs strictly
+#       after the last. The CDC current-state collapse (dim_*/fact_*) is no
+#       longer a separate task — it is now native AUTO CDC inside the silver
+#       pipeline (d).
 resources:
   jobs:
     powertools_build:
@@ -55,11 +57,15 @@ resources:
               - "--weeks=6"
               - "--users=100"
 
-        # (d) silver pipeline: gtm_events -> event_view_item + event_add_to_cart,
-        #     AND datasheet PDFs -> product_specs (IDP: _parsed_datasheets ->
-        #     _extracted_specs -> product_specs, three streaming tables). IDP moved
-        #     in here from a standalone warehouse SQL task; product_specs no longer
-        #     joins dim_product, so it does not depend on the curate chain below.
+        # (d) silver pipeline. Builds, all as streaming tables:
+        #     - gtm_events -> event_view_item + event_add_to_cart
+        #     - lb_*_history -> dim_product / dim_customer / fact_purchase /
+        #       fact_purchase_line via NATIVE AUTO CDC (the engine does the
+        #       CDC merge/collapse — no ROW_NUMBER warehouse task). This absorbed
+        #       the old standalone cdc_to_current sql_task.
+        #     - datasheet PDFs -> product_specs (IDP: _parsed_datasheets ->
+        #       _extracted_specs -> product_specs). product_specs no longer joins
+        #       dim_product, so IDP does not depend on the curate task below.
         - task_key: run_silver_pipeline
           depends_on:
             - task_key: seed_gtm_events
@@ -67,19 +73,14 @@ resources:
             pipeline_id: ${resources.pipelines.powertools_silver.id}
             full_refresh: false
 
-        # (e.1) CDC history -> dim_product / dim_customer / fact_purchase(_line).
-        - task_key: cdc_to_current
-          depends_on:
-            - task_key: run_silver_pipeline
-          sql_task:
-            warehouse_id: ${var.warehouse_id}
-            file:
-              path: ../src/cdc_to_current.sql
-
-        # (e.2) event_* silver -> fact_view_item / fact_add_to_cart (id-normalized).
+        # (e) event_* silver -> fact_view_item / fact_add_to_cart (id-normalized).
+        #     The terminal warehouse task. It has no data dependency on the CDC
+        #     tables (it only reads the event_* silver tables), but must run after
+        #     the silver pipeline that produces them — hence depends_on the
+        #     pipeline, not the retired cdc_to_current task.
         - task_key: key_normalize
           depends_on:
-            - task_key: cdc_to_current
+            - task_key: run_silver_pipeline
           sql_task:
             warehouse_id: ${var.warehouse_id}
             file:

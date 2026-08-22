@@ -36,18 +36,21 @@ e2e-powertools-demo/
     databricks.yml
     resources/
       lakebase.yml           # Lakebase project 'techsummit' (pg17) + raw_docs Volume + CDF setup notes
-      pipeline_silver.yml    # gtm_events -> event_* AND datasheet PDFs -> product_specs (IDP)
-      job_build.yml          # one DAG: seed_gtm -> silver(+IDP) -> cdc_to_current -> key_normalize
+      pipeline_silver.yml    # gtm_events -> event_*, lb_*_history -> dim/fact (AUTO CDC), PDFs -> product_specs (IDP)
+      job_build.yml          # one DAG: seed_gtm -> silver(CDC+IDP) -> key_normalize
     pipelines/silver/transformations/
       event_view_item.sql    # STREAMING TABLE: STREAM(gtm_events) -> view_item
       event_add_to_cart.sql  # STREAMING TABLE: STREAM(gtm_events) -> add_to_cart
+      dim_product.sql        # STREAMING TABLE: AUTO CDC STREAM(lb_products_history) -> dim_product
+      dim_customer.sql       # STREAMING TABLE: AUTO CDC STREAM(lb_accounts_history) -> dim_customer
+      fact_purchase.sql      # STREAMING TABLE: AUTO CDC STREAM(lb_purchases_history) -> fact_purchase
+      fact_purchase_line.sql # STREAMING TABLE: AUTO CDC STREAM(lb_purchase_lines_history) -> fact_purchase_line
       idp_parsed_datasheets.sql # STREAMING TABLE: STREAM read_files(PDFs) -> ai_parse_document
       idp_extracted_specs.sql   # STREAMING TABLE: ai_extract (typed schema) -> specs ARRAY<STRUCT>
       product_specs.sql         # STREAMING TABLE: explode specs -> typed product_specs (no product_id)
     src/
       seed_gtm_events.py     # behavior seed (view/cart focus)
       seed_lakebase_oltp.py  # seed OLTP + set REPLICA IDENTITY FULL (CDF prereq)
-      cdc_to_current.sql     # lb_*_history (CDF) -> dim_product / dim_customer / fact_purchase(_line)
       key_normalize.sql      # item_id -> product_id -> fact_view_item / fact_add_to_cart
     data/
       datasheets/            # (empty, .gitkeep) real Bosch datasheet PDFs — added later

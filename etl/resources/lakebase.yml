@@ -41,8 +41,10 @@ resources:
 # wal2delta feature for autoscaling Lakebase. It streams every insert/update/
 # delete on the `public` tables into Unity Catalog Delta tables named
 # `lb_<table>_history` in ${var.catalog}.${var.schema}, batched ~every 15s.
-# Genie NEVER sees these history tables directly — the curate job
-# (../src/cdc_to_current.sql) collapses them to current state (dim_* / fact_*).
+# Genie NEVER sees these history tables directly — the silver pipeline collapses
+# them to current state (dim_* / fact_*) via native AUTO CDC streaming flows
+# (../pipelines/silver/transformations/{dim_product,dim_customer,fact_purchase,
+# fact_purchase_line}.sql).
 #
 # CDF is NOT expressible as a bundle resource (no CLI/DAB verb as of CLI v1.4.0);
 # it is enabled + started outside the bundle:
