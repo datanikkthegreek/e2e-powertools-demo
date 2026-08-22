@@ -61,8 +61,9 @@ resources:
         #     - gtm_events -> event_view_item + event_add_to_cart
         #     - lb_*_history -> dim_product / dim_customer / fact_purchase /
         #       fact_purchase_line via NATIVE AUTO CDC (the engine does the
-        #       CDC merge/collapse — no ROW_NUMBER warehouse task). This absorbed
-        #       the old standalone cdc_to_current sql_task.
+        #       CDC merge/collapse — no ROW_NUMBER warehouse task). See
+        #       ../pipelines/silver/transformations/{dim_product,dim_customer,
+        #       fact_purchase,fact_purchase_line}.sql.
         #     - datasheet PDFs -> product_specs (IDP: _parsed_datasheets ->
         #       _extracted_specs -> product_specs). product_specs no longer joins
         #       dim_product, so IDP does not depend on the curate task below.
@@ -77,7 +78,7 @@ resources:
         #     The terminal warehouse task. It has no data dependency on the CDC
         #     tables (it only reads the event_* silver tables), but must run after
         #     the silver pipeline that produces them — hence depends_on the
-        #     pipeline, not the retired cdc_to_current task.
+        #     pipeline (which now also builds the CDC current-state tables).
         - task_key: key_normalize
           depends_on:
             - task_key: run_silver_pipeline
