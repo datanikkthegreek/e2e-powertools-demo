@@ -30,24 +30,35 @@ one produced. Run it in exactly this order:
      `lb_<table>_history` Delta tables (~15s batches). Wait until
      `lb_products_history`, `lb_accounts_history`, `lb_purchases_history`,
      `lb_purchase_lines_history` have rows. *(b) — must precede step 5: both the
-     GTM seed and `cdc_to_current` read the `lb_*_history` tables.*
+     GTM seed and the silver pipeline's AUTO CDC flows read the `lb_*_history`
+     tables.*
 4. **Upload PDFs.** Real Bosch **datasheet** PDFs to
    `…techsummit.raw_docs/datasheets` (the IDP streaming tables in the silver
    pipeline read them). Manuals are a Phase-2 concern.
 5. **Run `powertools-build`.** One job, one enforced DAG:
    `wait_for_cdc` (gate) → `seed_gtm_events` (c) → `run_silver_pipeline` (d) →
-   `cdc_to_current` → `key_normalize` (e).
-   The silver pipeline (d) also runs IDP (datasheet PDFs → `product_specs`) as
-   three streaming tables; IDP no longer depends on the curate chain because
-   `product_specs` is no longer keyed to `dim_product`.
-   This builds the 7 Genie base tables.
-   > **IDP reprocessing:** the IDP stages are streaming and `ai_extract` is
-   > pinned to `version 2.0`. Changing an IDP prompt/schema/version does **not**
-   > re-run it over datasheets already consumed — do a **full refresh** of the
-   > three IDP streaming tables to re-extract
-   > (`databricks bundle run powertools_silver --full-refresh _parsed_datasheets,_extracted_specs,product_specs -p FEVM`).
-   > A full refresh recomputes the event tables from the existing `gtm_events`
-   > (it does **not** re-run `seed_gtm_events`), so the funnel counts stay put.
+   `key_normalize` (e).
+   The silver pipeline (d) now builds most of the base tables as streaming tables:
+   - the two event tables (`event_view_item`, `event_add_to_cart`) from `gtm_events`;
+   - the four current-state tables (`dim_product`, `dim_customer`, `fact_purchase`,
+     `fact_purchase_line`) from the `lb_*_history` change-logs via **native AUTO
+     CDC** (the engine does the CDC merge/collapse — this replaced the old
+     standalone `cdc_to_current` warehouse task; there is no ROW_NUMBER collapse
+     task any more);
+   - IDP (datasheet PDFs → `product_specs`) as three streaming tables.
+
+   IDP and the CDC tables no longer depend on the curate step. `key_normalize` (e)
+   is the terminal warehouse task and produces `fact_view_item` / `fact_add_to_cart`
+   from the event silver tables; it has no data dependency on the CDC tables but
+   runs after the pipeline. This builds the 7 Genie base tables.
+   > **Reprocessing:** the CDC + IDP stages are streaming (and `ai_extract` is
+   > pinned to `version 2.0`). Changing an IDP prompt/schema/version — or needing
+   > to re-collapse a CDC table — does **not** re-run over inputs already consumed;
+   > do a **full refresh** of the affected streaming tables (e.g.
+   > `databricks bundle run powertools_silver --full-refresh _parsed_datasheets,_extracted_specs,product_specs -p FEVM`).
+   > A full refresh recomputes the event + CDC tables from the existing
+   > `gtm_events` / `lb_*_history` (it does **not** re-run `seed_gtm_events`), so
+   > the funnel counts stay put.
 6. **Build (UI):** Knowledge Assistant (manuals), Genie space (7 base tables),
    Supervisor agent (Genie + Knowledge Assistant).
 

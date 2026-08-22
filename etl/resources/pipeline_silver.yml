@@ -1,26 +1,37 @@
 # Silver pipeline (TRIMMED).
 #
-# Two source flows, all as streaming tables:
+# Three source flows, all as streaming tables:
 #   gtm_events (raw Delta) -> event_view_item + event_add_to_cart.
+#   Lakebase CDF change-logs (lb_*_history) --AUTO CDC-->
+#     dim_product + dim_customer + fact_purchase + fact_purchase_line.
 #   datasheet PDFs (raw_docs Volume) --IDP-->
 #     _parsed_datasheets -> _extracted_specs -> product_specs.
-# All other silver tables (purchase / pageview / abandon / signup) and every
-# gold cart MV + gold_customer_360 have been removed from this pipeline: the
-# demo funnel is view -> cart, and the money fact comes from Lakebase.
+# All other silver tables (pageview / abandon / signup) and every gold cart MV +
+# gold_customer_360 have been removed from this pipeline: the demo funnel is
+# view -> cart, and the money fact comes from Lakebase.
 #
-# IDP moved INTO this pipeline (was a standalone warehouse SQL task in
-# job_build.yml). It is now three streaming tables (parse -> typed extract ->
-# explode) that mirror the event tables' local style. product_specs is keyed by
-# source_path + model_name (it no longer joins dim_product / carries product_id),
-# so IDP no longer depends on the curate chain. ai_extract is pinned to version
-# 2.0 (deterministic response shape) and returns typed numerics with no regex.
+# CDC moved INTO this pipeline (was the standalone warehouse SQL task
+# etl/src/cdc_to_current.sql in job_build.yml). Each of the four current-state
+# tables is now a streaming table fed by a native AUTO CDC INTO flow from
+# STREAM(lb_*_history): the engine does the merge/collapse (keep latest change
+# per key by _sort_by, APPLY AS DELETE on 'delete') — no ROW_NUMBER, no manual
+# _rn/delete filtering. An intermediate streaming temp view per table projects/
+# normalizes the columns and drops update_preimage rows before the flow. The
+# binary-UUID normalization CASE is retained on this OLTP side because Lakebase
+# CDF renders the Postgres UUIDs as binary (verified live) — see dim_product.sql.
 #
-# Because the IDP stages are STREAMING, changing an ai_parse_document/ai_extract
-# prompt, schema, or pinned version does NOT re-run them over datasheets already
-# consumed -- a FULL REFRESH of the three IDP streaming tables is required to
-# re-extract. A full refresh recomputes the event tables from the EXISTING
-# gtm_events too (it does NOT re-run seed_gtm_events), so the funnel counts stay
-# put; prefer a targeted refresh of just the IDP tables when possible.
+# IDP moved INTO this pipeline too. It is three streaming tables (parse -> typed
+# extract -> explode) that mirror the event tables' local style. product_specs is
+# keyed by source_path + model_name (it no longer joins dim_product / carries
+# product_id), so IDP no longer depends on the curate chain. ai_extract is pinned
+# to version 2.0 (deterministic response shape) and returns typed numerics.
+#
+# Because the CDC + IDP stages are STREAMING, changing an ai_parse_document/
+# ai_extract prompt, schema, or pinned version does NOT re-run them over inputs
+# already consumed -- a FULL REFRESH of the affected streaming tables is required
+# to reprocess. A full refresh recomputes the event + CDC tables from the EXISTING
+# gtm_events / lb_*_history too (it does NOT re-run seed_gtm_events), so the funnel
+# counts stay put; prefer a targeted refresh when possible.
 resources:
   pipelines:
     powertools_silver:
@@ -34,6 +45,14 @@ resources:
             path: ../pipelines/silver/transformations/event_view_item.sql
         - file:
             path: ../pipelines/silver/transformations/event_add_to_cart.sql
+        - file:
+            path: ../pipelines/silver/transformations/dim_product.sql
+        - file:
+            path: ../pipelines/silver/transformations/dim_customer.sql
+        - file:
+            path: ../pipelines/silver/transformations/fact_purchase.sql
+        - file:
+            path: ../pipelines/silver/transformations/fact_purchase_line.sql
         - file:
             path: ../pipelines/silver/transformations/idp_parsed_datasheets.sql
         - file:

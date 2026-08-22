@@ -6,7 +6,7 @@ bundle:
 # DEPLOY THIS FIRST. It owns the techsummit Lakebase project (the OLTP source
 # the webshop App connects to) and the Delta data flow that feeds Genie:
 #   Lakebase (products/accounts/carts/purchases) --Lakebase CDF--> lb_*_history
-#     --collapse--> dim_* / fact_* (current state)
+#     --silver pipeline AUTO CDC--> dim_* / fact_* (current state)
 #   gtm_events (raw) --silver--> event_view_item + event_add_to_cart
 #     --key-normalize--> fact_view_item / fact_add_to_cart
 #   datasheet PDFs --IDP (silver pipeline)--> _parsed_datasheets

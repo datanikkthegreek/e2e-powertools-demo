@@ -4,19 +4,26 @@
 -- produces the two behavioral fact tables Genie consumes, keyed on product_id.
 --
 -- ============================================================================
--- CANONICAL UUID NORMALIZATION CONTRACT (must stay identical across all sites)
---   Sites: etl/src/cdc_to_current.sql, etl/src/key_normalize.sql,
---          etl/src/seed_gtm_events.py (_load_products).
---   Every join-key id is reduced to canonical lowercase hyphenated UUID text:
---     1. binary                -> hex(id) [32 chars] -> hyphenate 8-4-4-4-12 -> lower
---     2. string ^[0-9a-f]{32}$ -> hyphenate 8-4-4-4-12 -> lower   (case-insensitive)
---     3. else                  -> lower(CAST(id AS STRING))
---   So binary-, hex-string-, and already-hyphenated ids all collapse to the
---   SAME text and behavioral item_id == dim_product.product_id regardless of
---   the wal2delta output type. This is inlined (not a SQL UDF) on purpose: a
---   typed UDF parameter would coerce a binary id to string before typeof()
---   could see it, losing the binary branch. Keep every CASE below byte-for-byte
---   identical to the other sites (only the column name changes).
+-- CANONICAL UUID NORMALIZATION CONTRACT (both sides yield the SAME text)
+--   Every join-key id must be canonical lowercase hyphenated UUID text so the
+--   behavioral product_id == dim_product.product_id. There are two kinds of site:
+--
+--   OLTP / CDC side — id arrives as BINARY (Lakebase CDF renders the Postgres
+--     UUID as raw binary; verified live 2026-08-22, typeof(id)='binary' in every
+--     lb_*_history table). CAST(binary AS STRING) is garbage, so those sites MUST
+--     keep the full CASE: hex(id) -> hyphenate 8-4-4-4-12 -> lower. Sites:
+--     etl/pipelines/silver/transformations/{dim_product,dim_customer,
+--     fact_purchase,fact_purchase_line}.sql and etl/src/seed_gtm_events.py.
+--
+--   Behavioral side (THIS FILE) — item_id arrives already as canonical lowercase
+--     hyphenated STRING: seed_gtm_events normalizes the binary UUID before
+--     serializing it into gtm_events, and the silver event tables type item_id as
+--     STRING via from_json. The binary + hex-32 branches PROVABLY never fire here
+--     (verified live 2026-08-22: across 3012 view + 830 cart item_ids, 0 binary,
+--     0 bare-32-hex, and 0 rows where the old 3-branch CASE differed from
+--     lower(CAST(item_id AS STRING))). So the regex was dead weight and is
+--     removed; lower(CAST(... AS STRING)) is byte-identical and keeps the funnel
+--     join green. (lower() is retained defensively against any stray uppercase.)
 -- ============================================================================
 -- Catalog/schema come from the `powertools-build` job parameters (:catalog /
 -- :schema), so a bundle target override is honored consistently with the other
@@ -30,11 +37,7 @@ CREATE OR REPLACE TABLE fact_view_item AS
 SELECT
   v.ingest_timestamp                       AS event_ts,
   CAST(v.user_id AS STRING)                AS user_id,
-  CASE WHEN typeof(item.item_id) = 'binary'
-       THEN lower(regexp_replace(hex(item.item_id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(item.item_id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(item.item_id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(item.item_id AS STRING)) END  AS product_id,
+  lower(CAST(item.item_id AS STRING))      AS product_id,
   v.ga_session_id                          AS session_id
 FROM event_view_item v
 LATERAL VIEW explode(v.items) t AS item
@@ -46,11 +49,7 @@ SELECT
   a.source_timestamp                       AS event_ts,
   CAST(a.user_id AS STRING)                AS user_id,
   CAST(a.cart_id AS STRING)                AS cart_id,
-  CASE WHEN typeof(a.item_id) = 'binary'
-       THEN lower(regexp_replace(hex(a.item_id), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       WHEN lower(CAST(a.item_id AS STRING)) RLIKE '^[0-9a-f]{32}$'
-       THEN lower(regexp_replace(CAST(a.item_id AS STRING), '^(.{8})(.{4})(.{4})(.{4})(.{12})$', '$1-$2-$3-$4-$5'))
-       ELSE lower(CAST(a.item_id AS STRING)) END      AS product_id,
+  lower(CAST(a.item_id AS STRING))         AS product_id,
   a.quantity_delta                         AS quantity_delta,
   a.cart_action                            AS cart_action
 FROM event_add_to_cart a

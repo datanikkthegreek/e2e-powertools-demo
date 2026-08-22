@@ -2,8 +2,8 @@
 
 The Lakebase CDF feed (see ../resources/lakebase.yml) is enabled outside the
 bundle, so it can't be a task in this job — but every downstream task reads what
-it produces. Both `seed_gtm_events` (reads `lb_products_history`) and
-`cdc_to_current` (reads all four `lb_*_history` change-logs) will silently
+it produces. Both `seed_gtm_events` (reads `lb_products_history`) and the silver
+pipeline's AUTO CDC flows (read all four `lb_*_history` change-logs) will silently
 produce empty/partial output if they run before CDF has landed its first rows.
 
 This task is the job's first node: it polls until ALL required history tables

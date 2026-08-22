@@ -78,10 +78,13 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
     should run the CDC sync first.
     """
     tbl = f"{catalog}.{schema}.lb_products_history"
-    # Collapse to current state the same way cdc_to_current.sql does: rank ALL
-    # Lakebase CDF change rows per id by `_sort_by DESC` (CDF's monotonic order
-    # key), keep the newest (_rn = 1), and only THEN drop rows whose latest
-    # change is a delete or the pre-image half of an update. Filtering before
+    # Collapse lb_products_history to current state the same way the silver
+    # pipeline's dim_product AUTO CDC flow does (etl/pipelines/silver/
+    # transformations/dim_product.sql): rank ALL Lakebase CDF change rows per id
+    # by `_sort_by DESC` (CDF's monotonic order key), keep the newest (_rn = 1),
+    # and only THEN drop rows whose latest change is a delete or the pre-image
+    # half of an update. This seed runs BEFORE the pipeline builds dim_product,
+    # so it reads the raw history here rather than dim_product. Filtering before
     # ranking would let a deleted/superseded product's prior version surface as
     # _rn=1 and look active. (An UPDATE emits update_preimage + update_postimage;
     # the postimage has the higher _sort_by, so it wins _rn=1.)
@@ -94,19 +97,21 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
         .where(F.col("_rn") == 1)
         .where(~F.col("_pg_change_type").isin("delete", "update_preimage"))
         .select(
-            # CANONICAL UUID NORMALIZATION CONTRACT (must stay identical across
-            # all sites: etl/src/cdc_to_current.sql, etl/src/key_normalize.sql,
-            # and here). Reduce the Lakebase id to canonical lowercase hyphenated
-            # UUID text HERE, before it is serialized into the behavioral
-            # `item_id`, so item_id == dim_product.product_id regardless of the
-            # wal2delta output type:
+            # CANONICAL UUID NORMALIZATION CONTRACT (OLTP / binary side).
+            # This is the SOURCE of the behavioral item_id: it reduces the
+            # Lakebase id to canonical lowercase hyphenated UUID text HERE, before
+            # serializing it into gtm_events, so item_id == dim_product.product_id.
+            # The Lakebase id is BINARY (Lakebase CDF renders the Postgres UUID as
+            # raw binary; verified live 2026-08-22), so the binary branch is
+            # LOAD-BEARING — a plain .cast("string") on a binary id is garbage and
+            # would silently break the join. The full CASE is retained (identical
+            # to the silver AUTO CDC flows in dim_product.sql etc.):
             #   1. binary                -> hex(id) [32 chars] -> hyphenate 8-4-4-4-12 -> lower
             #   2. string ^[0-9a-f]{32}$ -> hyphenate 8-4-4-4-12 -> lower   (case-insensitive)
             #   3. else                  -> lower(CAST(id AS STRING))
-            # (A plain .cast("string") on a binary id is NOT canonical, which
-            # would push item_id down the string pass-through and silently break
-            # the join.) The CASE below is byte-for-byte identical to the SQL
-            # sites (only the column name changes).
+            # The BEHAVIORAL read-back side (etl/src/key_normalize.sql) then sees
+            # item_id already as canonical lowercase text, so it uses the simple
+            # lower(CAST(...)) form — the regex there was proven dead weight.
             F.expr(
                 "CASE "
                 "WHEN typeof(id) = 'binary' "
