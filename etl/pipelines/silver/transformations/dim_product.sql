@@ -22,18 +22,19 @@
 --   That transform now lives in ONE place — the canonical_uuid() UC function
 --   (etl/src/create_canonical_uuid.sql, created by the create_canonical_uuid job
 --   task before this pipeline runs) — so dim_product.product_id equals
---   fact_view_item/fact_add_to_cart.product_id. The BINARY-typed parameter is the
---   seatbelt: a non-binary column would fail loud, not silently corrupt the key.
+--   fact_view_item/fact_add_to_cart.product_id. The BINARY-typed parameter
+--   documents intent and catches an obviously-wrong argument, though SQL may still
+--   apply an implicit cast, so it is a guard rather than an absolute guarantee.
 --   The behavioral side (key_normalize.sql) sees item_id already as canonical
 --   lowercase text, so it uses the simple lower(CAST(...)) form — see that note.
--- The function call is SCHEMA-QUALIFIED (techsummit.canonical_uuid). Bare TABLE
--- names resolve against the pipeline's configured schema, but SDP resolves a bare
--- FUNCTION only against the `default` schema on its search path (verified live
--- 2026-08-22: UNRESOLVED_ROUTINE on search path [..., <catalog>.default]), so the
--- schema is required to reach the function in techsummit.
+-- The call is BARE (canonical_uuid). The function lives in the catalog's `default`
+-- schema (etl/src/create_canonical_uuid.sql) and SDP's function search path
+-- includes <catalog>.default, so a bare call resolves there (verified live
+-- 2026-08-22). Keeping it in default, not techsummit, is what honors the bundle
+-- target/schema override: the catalog follows the target and no schema is pinned.
 CREATE TEMPORARY VIEW _products_changes AS
 SELECT
-  techsummit.canonical_uuid(id) AS product_id,
+  canonical_uuid(id)            AS product_id,
   name,
   description                   AS category,
   price_eur,

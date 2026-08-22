@@ -107,14 +107,15 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
             # would silently break the join. The transform is centralized in the
             # canonical_uuid(BINARY) UC function (etl/src/create_canonical_uuid.sql,
             # created by the create_canonical_uuid job task before this seed runs),
-            # the same function the silver AUTO CDC flows call. It is fully
-            # qualified here because the seed runs on a generic cluster with no
-            # techsummit default schema. The BINARY-typed parameter is the seatbelt:
-            # a non-binary id would fail loud, not silently corrupt the key. The
-            # BEHAVIORAL read-back side (etl/src/key_normalize.sql) then sees item_id
-            # already as canonical lowercase text, so it uses the simple
-            # lower(CAST(...)) form — the regex there was proven dead weight.
-            F.expr(f"{catalog}.{schema}.canonical_uuid(id)").alias("product_id"),
+            # the same function the silver AUTO CDC flows call. It lives in the
+            # catalog's `default` schema and is fully qualified here (the seed runs
+            # on a generic cluster with no default schema set). The BINARY-typed
+            # parameter documents intent, though SQL may apply an implicit cast, so
+            # it is a guard not an absolute guarantee. The BEHAVIORAL read-back side
+            # (etl/src/key_normalize.sql) then sees item_id already as canonical
+            # lowercase text, so it uses the simple lower(CAST(...)) form — the
+            # regex there was proven dead weight.
+            F.expr(f"{catalog}.default.canonical_uuid(id)").alias("product_id"),
             F.col("name"),
             F.col("price_eur"),
         )

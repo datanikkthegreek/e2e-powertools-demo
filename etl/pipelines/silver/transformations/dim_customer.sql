@@ -6,11 +6,11 @@
 -- manual _rn/delete filtering. signup_date is a literal NULL DATE (accounts carry
 -- no signup timestamp). The binary id is normalized via the centralized
 -- canonical_uuid(BINARY) UC function (see dim_product.sql / create_canonical_uuid.sql).
--- The call is SCHEMA-QUALIFIED (techsummit.) because SDP resolves a bare function
--- only against the `default` schema — see dim_product.sql for the full note.
+-- The call is BARE: the function lives in <catalog>.default, which is on SDP's
+-- function search path — see dim_product.sql for the full note.
 CREATE TEMPORARY VIEW _accounts_changes AS
 SELECT
-  techsummit.canonical_uuid(id) AS customer_id,
+  canonical_uuid(id)           AS customer_id,
   city,
   country,
   CAST(NULL AS DATE)            AS signup_date,

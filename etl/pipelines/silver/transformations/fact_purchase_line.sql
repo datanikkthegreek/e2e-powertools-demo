@@ -19,14 +19,14 @@
 -- consumes this table and an extra identity column is harmless; the other
 -- projected columns (purchase_id, product_id, quantity, unit_price_eur, name_snapshot) are
 -- unchanged. All three binary ids go through canonical_uuid() (see dim_product.sql
--- / create_canonical_uuid.sql). The calls are SCHEMA-QUALIFIED (techsummit.)
--- because SDP resolves a bare function only against the `default` schema — see
--- dim_product.sql for the full note.
+-- / create_canonical_uuid.sql). The calls are BARE: the function lives in
+-- <catalog>.default, which is on SDP's function search path — see dim_product.sql
+-- for the full note.
 CREATE TEMPORARY VIEW _purchase_lines_changes AS
 SELECT
-  techsummit.canonical_uuid(id)          AS purchase_line_id,
-  techsummit.canonical_uuid(purchase_id) AS purchase_id,
-  techsummit.canonical_uuid(product_id)  AS product_id,
+  canonical_uuid(id)           AS purchase_line_id,
+  canonical_uuid(purchase_id)  AS purchase_id,
+  canonical_uuid(product_id)   AS product_id,
   quantity,
   unit_price_eur,
   name_snapshot,

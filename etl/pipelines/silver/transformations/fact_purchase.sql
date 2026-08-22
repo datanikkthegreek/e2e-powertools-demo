@@ -6,13 +6,13 @@
 -- normalized via the centralized canonical_uuid(BINARY) UC function (see
 -- dim_product.sql / create_canonical_uuid.sql). created_at + total_eur are the
 -- money columns, carried through unchanged.
--- The calls are SCHEMA-QUALIFIED (techsummit.) because SDP resolves a bare
--- function only against the `default` schema — see dim_product.sql for the note.
+-- The calls are BARE: the function lives in <catalog>.default, which is on SDP's
+-- function search path — see dim_product.sql for the note.
 CREATE TEMPORARY VIEW _purchases_changes AS
 SELECT
-  techsummit.canonical_uuid(id)          AS purchase_id,
-  techsummit.canonical_uuid(account_id)  AS customer_id,
-  techsummit.canonical_uuid(cart_id)     AS cart_id,
+  canonical_uuid(id)           AS purchase_id,
+  canonical_uuid(account_id)   AS customer_id,
+  canonical_uuid(cart_id)      AS cart_id,
   created_at,
   total_eur,
   _pg_change_type,
