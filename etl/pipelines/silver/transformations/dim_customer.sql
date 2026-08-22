@@ -4,7 +4,7 @@
 -- full AUTO CDC + preimage-filter + binary-UUID rationale). The engine collapses
 -- lb_accounts_history to current state via AUTO CDC INTO — no ROW_NUMBER, no
 -- manual _rn/delete filtering. signup_date is a literal NULL DATE (accounts carry
--- no signup timestamp), preserved from the retired cdc_to_current.sql output.
+-- no signup timestamp).
 -- Bare names resolve in the pipeline's configured catalog/schema.
 CREATE TEMPORARY VIEW _accounts_changes AS
 SELECT

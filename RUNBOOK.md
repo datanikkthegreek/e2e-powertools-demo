@@ -42,9 +42,8 @@ one produced. Run it in exactly this order:
    - the two event tables (`event_view_item`, `event_add_to_cart`) from `gtm_events`;
    - the four current-state tables (`dim_product`, `dim_customer`, `fact_purchase`,
      `fact_purchase_line`) from the `lb_*_history` change-logs via **native AUTO
-     CDC** (the engine does the CDC merge/collapse — this replaced the old
-     standalone `cdc_to_current` warehouse task; there is no ROW_NUMBER collapse
-     task any more);
+     CDC** (the engine does the CDC merge/collapse in-pipeline — no ROW_NUMBER
+     collapse task);
    - IDP (datasheet PDFs → `product_specs`) as three streaming tables.
 
    IDP and the CDC tables no longer depend on the curate step. `key_normalize` (e)
