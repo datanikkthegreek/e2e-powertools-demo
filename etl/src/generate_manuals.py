@@ -55,9 +55,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -246,8 +248,34 @@ def _download(url: str, dest: Path) -> int:
 
 
 # ── PDF verification (real PDF, >1 page) ────────────────────────────────────────
+def _require_pypdf() -> None:
+    """Abort up front unless pypdf is importable.
+
+    pypdf is a MANDATORY dependency: without it we cannot confirm a candidate's
+    page count, and a 1-page Declaration-of-Conformity stub would sail past a
+    header+size check. Rather than silently accept unverified PDFs, fail closed
+    with an actionable message. Called at the top of main() so --help still works
+    without pypdf installed.
+    """
+    try:
+        import pypdf  # noqa: F401
+    except ModuleNotFoundError:
+        sys.exit(
+            "pypdf is REQUIRED for manual verification (the > 1 page check) but is "
+            "not installed. Install the pinned deps and re-run:\n"
+            "    pip install -r etl/requirements.txt\n"
+            "Aborting: no manual is accepted without a verified page count."
+        )
+
+
 def verify_pdf(path: Path) -> tuple[bool, str]:
-    """Return (ok, detail). Requires %PDF header, non-trivial size, and > 1 page."""
+    """Return (ok, detail). A manual is accepted ONLY when the %PDF header, a
+    non-trivial size, AND a pypdf-confirmed page count > 1 are all present.
+
+    pypdf is mandatory (main() aborts via _require_pypdf if it is missing); this
+    function reasserts it defensively and treats a missing pypdf as a failure
+    rather than a pass, so verification can never silently degrade.
+    """
     try:
         size = path.stat().st_size
     except OSError as exc:
@@ -259,20 +287,45 @@ def verify_pdf(path: Path) -> tuple[bool, str]:
     if head != b"%PDF-":
         return False, f"not a PDF (header {head!r})"
     try:
-        from pypdf import PdfReader  # lazy import; verification-only dependency
-
-        pages = len(PdfReader(str(path)).pages)
-        if pages <= 1:
-            return False, f"only {pages} page(s)"
-        return True, f"{size} bytes, {pages} pages"
+        from pypdf import PdfReader  # mandatory; _require_pypdf enforces presence
     except ModuleNotFoundError:
-        # pypdf not installed — fall back to a structural check.
-        tail = path.read_bytes()[-1024:]
-        if b"%%EOF" not in tail:
-            return False, "missing %%EOF trailer"
-        return True, f"{size} bytes (page count unverified: install pypdf)"
+        return False, "pypdf not installed (required for page-count verification)"
+    try:
+        pages = len(PdfReader(str(path)).pages)
     except Exception as exc:  # corrupt/encrypted PDF
         return False, f"unreadable PDF: {exc}"
+    if pages <= 1:
+        return False, f"only {pages} page(s)"
+    return True, f"{size} bytes, {pages} pages"
+
+
+# ── atomic staging (verify a temp copy, then replace dest only on success) ───────
+def _stage_atomically(dest: Path, populate) -> tuple[bool, str]:
+    """Write via ``populate(tmp)`` into a temp file, verify it, and atomically
+    replace ``dest`` ONLY if verification passes.
+
+    A failed fetch/copy — or a candidate that fails verification — never touches
+    an already-valid ``dest``, so ``--force`` cannot destroy a previously-cached
+    good manual when a re-fetch fails. The temp file lives in MANUALS_DIR (same
+    filesystem) so ``os.replace`` is a true atomic rename.
+    """
+    MANUALS_DIR.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(MANUALS_DIR), prefix=f".{dest.stem}.", suffix=".pdf.tmp"
+    )
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        populate(tmp)
+        ok, detail = verify_pdf(tmp)
+        if ok:
+            os.replace(tmp, dest)
+            return ok, detail
+        tmp.unlink(missing_ok=True)
+        return ok, detail
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 # ── download step ────────────────────────────────────────────────────────────────
@@ -301,18 +354,14 @@ def source_manual(tool: dict, force: bool, local_dir: Path) -> dict:
     if explicit:
         print(f"[url ] {tid}: fetching explicit Bosch URL {explicit}")
         try:
-            MANUALS_DIR.mkdir(parents=True, exist_ok=True)
-            _download(explicit, dest)
-            ok, detail = verify_pdf(dest)
+            ok, detail = _stage_atomically(dest, lambda tmp: _download(explicit, tmp))
             if ok:
                 print(f"[ok  ] {tid}: verified real manual ({detail}) from explicit URL")
                 return {"id": tid, "status": "sourced", "path": dest,
                         "detail": detail, "source": explicit, "note": note}
             print(f"[warn] {tid}: explicit URL PDF failed verification ({detail})")
-            dest.unlink(missing_ok=True)
         except Exception as exc:
             print(f"[warn] {tid}: explicit URL failed: {exc}")
-            dest.unlink(missing_ok=True)
         time.sleep(REQUEST_DELAY_S)
 
     # 2) local browser-download (LOCAL_MANUALS). Terminal for these tools — no
@@ -326,19 +375,15 @@ def source_manual(tool: dict, force: bool, local_dir: Path) -> dict:
             return {"id": tid, "status": "unsourced",
                     "detail": f"local source missing: {src}", "note": note}
         try:
-            MANUALS_DIR.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, dest)
-            ok, detail = verify_pdf(dest)
+            ok, detail = _stage_atomically(dest, lambda tmp: shutil.copyfile(src, tmp))
             if ok:
                 print(f"[ok  ] {tid}: verified real manual ({detail}) from local file")
                 return {"id": tid, "status": "sourced", "path": dest, "detail": detail,
                         "source": f"local:{local['filename']} ({local['origin']})",
                         "note": note}
             print(f"[warn] {tid}: local PDF failed verification ({detail})")
-            dest.unlink(missing_ok=True)
         except Exception as exc:
             print(f"[warn] {tid}: local staging failed: {exc}")
-            dest.unlink(missing_ok=True)
         return {"id": tid, "status": "unsourced",
                 "detail": f"local file present but unusable: {src}", "note": note}
 
@@ -366,12 +411,9 @@ def source_manual(tool: dict, force: bool, local_dir: Path) -> dict:
                 continue
             url, size = pdf
             print(f"[get ] {tid}: {title!r} -> {ident} ({size} bytes)")
-            MANUALS_DIR.mkdir(parents=True, exist_ok=True)
-            _download(url, dest)
-            ok, detail = verify_pdf(dest)
+            ok, detail = _stage_atomically(dest, lambda tmp: _download(url, tmp))
             if not ok:
                 print(f"[warn] {tid}: downloaded PDF failed verification ({detail})")
-                dest.unlink(missing_ok=True)
                 continue
             print(f"[ok  ] {tid}: verified real manual ({detail}) from {ident}")
             return {"id": tid, "status": "sourced", "path": dest,
@@ -448,6 +490,56 @@ def print_summary(results: list[dict]) -> None:
         print("  No real manual was found for these on the source; left out (not faked).")
 
 
+# ── startup validation (route coverage + target guardrails) ──────────────────────
+def _validate_routes() -> None:
+    """Every tool id must resolve to exactly ONE source route.
+
+    A tool sources via its explicit URL (MANUAL_URLS), a local browser-download
+    (LOCAL_MANUALS), or — for ids in neither map — the archive.org fallback. This
+    asserts the maps are coherent at startup: no duplicate tool ids, no id in BOTH
+    the URL and local maps (ambiguous route), and neither map referencing an
+    unknown id. Ids in neither map take the archive fallback (a valid single
+    route), so no id can be 'missing'. Fails closed on any coverage gap.
+    """
+    tool_ids = [t["id"] for t in TOOLS]
+    dupes = sorted({tid for tid in tool_ids if tool_ids.count(tid) > 1})
+    if dupes:
+        sys.exit(f"[config] duplicate tool id(s) in TOOLS: {dupes}")
+    known = set(tool_ids)
+    unknown_url = sorted(set(MANUAL_URLS) - known)
+    if unknown_url:
+        sys.exit(f"[config] MANUAL_URLS references unknown tool id(s): {unknown_url}")
+    unknown_local = sorted(set(LOCAL_MANUALS) - known)
+    if unknown_local:
+        sys.exit(f"[config] LOCAL_MANUALS references unknown tool id(s): {unknown_local}")
+    both = sorted(set(MANUAL_URLS) & set(LOCAL_MANUALS))
+    if both:
+        sys.exit(f"[config] tool id(s) in BOTH URL and local routes (ambiguous): {both}")
+
+
+def _validate_target(catalog: str, schema: str, volume: str,
+                     allow_catalog_override: bool) -> None:
+    """Fail closed BEFORE any Volume write if the target looks wrong or unsafe.
+
+    Guardrails: reject '/'/'..'/whitespace in any component (path-redirection);
+    the schema must be 'techsummit' (this demo operates ONLY there); the 'cdp'
+    catalog/schema is never touched; and the catalog must be the FEVM default
+    unless --allow-catalog-override is passed.
+    """
+    for label, val in (("catalog", catalog), ("schema", schema), ("volume", volume)):
+        if not val or "/" in val or ".." in val or any(c.isspace() for c in val):
+            sys.exit(f"[guard] invalid {label} {val!r}: must be non-empty and free "
+                     "of '/', '..', and whitespace")
+    if "cdp" in (catalog, schema):
+        sys.exit("[guard] refusing to touch the 'cdp' catalog/schema")
+    if schema != DEFAULT_SCHEMA:
+        sys.exit(f"[guard] schema must be '{DEFAULT_SCHEMA}' (got {schema!r}); this "
+                 "demo operates ONLY in techsummit")
+    if catalog != DEFAULT_CATALOG and not allow_catalog_override:
+        sys.exit(f"[guard] catalog must be the FEVM default '{DEFAULT_CATALOG}' "
+                 f"(got {catalog!r}); pass --allow-catalog-override to target another")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Download + upload real Bosch demo manuals.")
     ap.add_argument("--catalog", default=DEFAULT_CATALOG)
@@ -456,6 +548,11 @@ def main() -> None:
     ap.add_argument("--profile", default=DEFAULT_PROFILE)
     ap.add_argument("--force", action="store_true", help="re-download even if present")
     ap.add_argument("--no-upload", action="store_true", help="download + verify only")
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="upload the verified subset even if some expected tools "
+                         "did not source (default: fail closed, upload nothing)")
+    ap.add_argument("--allow-catalog-override", action="store_true",
+                    help="permit a --catalog other than the FEVM default")
     ap.add_argument("--local-dir", default=str(DEFAULT_LOCAL_DIR),
                     help="folder holding the browser-only manuals (LOCAL_MANUALS); "
                          f"default {DEFAULT_LOCAL_DIR}")
@@ -463,18 +560,40 @@ def main() -> None:
                     help="restrict to this tool id (repeatable)")
     args = ap.parse_args()
 
+    # pypdf is mandatory for verification; abort now (after argparse, so --help works).
+    _require_pypdf()
+    # Coherent source-route config is a precondition for a trustworthy run.
+    _validate_routes()
+
     local_dir = Path(args.local_dir).expanduser()
 
     tools = TOOLS
     if args.only:
+        known = {t["id"] for t in TOOLS}
+        bad = [tid for tid in args.only if tid not in known]
+        if bad:
+            sys.exit(f"--only: unknown tool id(s): {', '.join(bad)}. "
+                     f"Known ids: {', '.join(t['id'] for t in TOOLS)}")
         wanted = set(args.only)
         tools = [t for t in TOOLS if t["id"] in wanted]
-        if not tools:
-            sys.exit(f"--only {args.only} matched no tool ids in TOOLS")
 
     results = [source_manual(t, args.force, local_dir) for t in tools]
 
+    # Fail closed on a partial result: the "expected set" is exactly the tools we
+    # processed (all of TOOLS, or the --only subset). Unless --allow-partial is
+    # set, do not upload anything and exit non-zero if any expected tool is unsourced.
+    expected_ids = {t["id"] for t in tools}
+    sourced_ids = {r["id"] for r in results if r["status"] in ("sourced", "present")}
+    missing = sorted(expected_ids - sourced_ids)
+    if missing and not args.allow_partial:
+        print_summary(results)
+        sys.exit(f"\n[fail] {len(missing)} expected tool(s) not sourced: "
+                 f"{', '.join(missing)}. Refusing to upload a partial set "
+                 "(fail-closed). Pass --allow-partial to upload the verified subset.")
+
     if not args.no_upload:
+        _validate_target(args.catalog, args.schema, args.volume,
+                         args.allow_catalog_override)
         upload(results, args.catalog, args.schema, args.volume, args.profile, args.force)
     else:
         print("[done] --no-upload set; skipped Volume upload.")

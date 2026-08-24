@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import sys
 
 from databricks.sdk import WorkspaceClient
 
@@ -28,6 +29,7 @@ from manage_knowledge_assistant import (
     create_knowledge_assistant,
     create_knowledge_source_files,
     get_knowledge_assistant_id_by_display_name,
+    list_knowledge_sources,
     sync_knowledge_sources,
 )
 
@@ -60,6 +62,34 @@ SOURCE_DESCRIPTION = (
 )
 
 
+def _validate_target(catalog: str, schema: str, volume: str,
+                     allow_catalog_override: bool) -> None:
+    """Fail closed BEFORE any WorkspaceClient/KA call if the target is unsafe.
+
+    Mirrors the guardrails in generate_manuals.py: reject '/'/'..'/whitespace in
+    any component; schema must be 'techsummit'; never the 'cdp' catalog/schema;
+    catalog must be the FEVM default unless --allow-catalog-override is passed.
+    """
+    for label, val in (("catalog", catalog), ("schema", schema), ("volume", volume)):
+        if not val or "/" in val or ".." in val or any(c.isspace() for c in val):
+            sys.exit(f"[guard] invalid {label} {val!r}: must be non-empty and free "
+                     "of '/', '..', and whitespace")
+    if "cdp" in (catalog, schema):
+        sys.exit("[guard] refusing to touch the 'cdp' catalog/schema")
+    if schema != DEFAULT_SCHEMA:
+        sys.exit(f"[guard] schema must be '{DEFAULT_SCHEMA}' (got {schema!r}); this "
+                 "demo operates ONLY in techsummit")
+    if catalog != DEFAULT_CATALOG and not allow_catalog_override:
+        sys.exit(f"[guard] catalog must be the FEVM default '{DEFAULT_CATALOG}' "
+                 f"(got {catalog!r}); pass --allow-catalog-override to target another")
+
+
+def _source_path(src) -> str:
+    """Best-effort extract of a knowledge source's Volume path (files sources)."""
+    files = getattr(src, "files", None)
+    return (getattr(files, "path", None) or "") if files is not None else ""
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Create-or-reuse the powertools-manuals-ka Knowledge Assistant (SDK)."
@@ -68,7 +98,13 @@ def main() -> None:
     ap.add_argument("--schema", default=DEFAULT_SCHEMA)
     ap.add_argument("--volume", default=DEFAULT_VOLUME)
     ap.add_argument("--profile", default=DEFAULT_PROFILE)
+    ap.add_argument("--allow-catalog-override", action="store_true",
+                    help="permit a --catalog other than the FEVM default")
     args = ap.parse_args()
+
+    # Fail closed before touching the workspace if the target looks wrong/unsafe.
+    _validate_target(args.catalog, args.schema, args.volume,
+                     args.allow_catalog_override)
 
     volume_path = (
         f"/Volumes/{args.catalog}/{args.schema}/{args.volume}/{VOLUME_SUBFOLDER}/"
@@ -92,10 +128,36 @@ def main() -> None:
             f"(id {src_id}, state {src.state}) -> {volume_path}"
         )
     else:
+        # True create-or-update: reuse the KA, but ensure a files source actually
+        # points at the target Volume path before syncing. An existing KA with no
+        # matching source (e.g. it was created empty, or the path changed) would
+        # otherwise sync nothing.
         print(
             f"[ka  ] reusing existing knowledge-assistants/{ka_id} "
             f"({DISPLAY_NAME!r}) — no re-create, no delete"
         )
+        want = volume_path.rstrip("/")
+        existing = list(list_knowledge_sources(w, ka_id))
+        matched = [s for s in existing if _source_path(s).rstrip("/") == want]
+        if matched:
+            print(
+                f"[src ] found existing files source at {volume_path} "
+                f"({len(matched)} match) — reusing it"
+            )
+        else:
+            paths = ", ".join(_source_path(s) or "?" for s in existing) or "none"
+            print(
+                f"[src ] no source at {volume_path} (existing: {paths}) — "
+                "attaching one"
+            )
+            src = create_knowledge_source_files(
+                w, ka_id, SOURCE_DISPLAY_NAME, SOURCE_DESCRIPTION, volume_path
+            )
+            src_id = (src.name or "").rsplit("/", 1)[-1]
+            print(
+                f"[src ] attached files source {SOURCE_DISPLAY_NAME!r} "
+                f"(id {src_id}, state {src.state}) -> {volume_path}"
+            )
 
     # Always sync so freshly-uploaded manuals are (re)indexed.
     print(f"[sync] syncing knowledge sources for knowledge-assistants/{ka_id}")

@@ -95,6 +95,15 @@ def create_knowledge_source_files(
     )
 
 
+def list_knowledge_sources(
+    w: WorkspaceClient, assistant_id: str
+) -> Iterator[KnowledgeSource]:
+    """Yield the knowledge sources already attached to a KA (SDK paginates)."""
+    return w.knowledge_assistants.list_knowledge_sources(
+        parent=f"knowledge-assistants/{assistant_id}"
+    )
+
+
 def get_knowledge_source(
     w: WorkspaceClient, assistant_id: str, source_id: str
 ) -> KnowledgeSource:

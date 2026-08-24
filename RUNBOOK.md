@@ -92,11 +92,11 @@ own chunking/embedding/retrieval over the PDFs.
 > **Real manuals only, 12/12.** `etl/src/generate_manuals.py` stages the genuine
 > Bosch manual PDF for each tool from one of three sources (see the script header):
 >
-> - **8 auto-download** — 7 via an explicit per-tool URL map (`MANUAL_URLS`) on
->   Bosch's own hosts (`bosch-professional.com` + regional `media.*.bosch-pt.*`
->   CDNs under `/binary/manualsmedia/…`, docnum series `160992A…`, plus one
->   `bosch-diy.com/storage/…` DIY manual), and `gbh-2-26` via an **Internet
->   Archive** (archive.org) fallback search. These need no manual steps.
+> - **7 explicit URLs + 1 archive.org fallback** — 7 via an explicit per-tool URL
+>   map (`MANUAL_URLS`) on Bosch's own hosts (`bosch-professional.com` + regional
+>   `media.*.bosch-pt.*` CDNs under `/binary/manualsmedia/…`, docnum series
+>   `160992A…`, plus one `bosch-diy.com/storage/…` DIY manual), and `gbh-2-26` via
+>   an **Internet Archive** (archive.org) fallback search. These need no manual steps.
 > - **4 browser-only** — `gsr-18v-55`, `pws-700-115`, `psr-1080-li`,
 >   `psb-1800-li-2` come from sources that block scripted download (`gsr-18v-55`'s
 >   public copy sits behind Cloudflare on device.report; the other three are
@@ -107,7 +107,9 @@ own chunking/embedding/retrieval over the PDFs.
 >   `etl/data/manuals/<tool-id>.pdf`.
 >
 > Every candidate — URL, local, or archive.org — is verified (`%PDF` header,
-> non-trivial size, > 1 page) before upload; nothing is synthesized. **Three are
+> non-trivial size, and a **`pypdf`-confirmed page count > 1** — `pypdf` is a
+> required dependency, so a 1-page Declaration-of-Conformity stub is rejected)
+> before upload; nothing is synthesized. **Three are
 > honest nearest-variant / family substitutions** for tools with no exact PDF,
 > flagged in the run summary: `pbh-2100-re` → Bosch **PBH 2500 SRE** manual (same
 > rotary-hammer family); `psr-1080-li` → Bosch **PSB 1080 LI-2** booklet (same
@@ -128,14 +130,13 @@ on the current FEVM target).
 
 ### Prerequisites
 
-The downloader uses `requests` (usually already present) and, for the ">1 page"
-PDF verification, `pypdf` (optional — without it the script still checks the
-`%PDF` header, size, and `%%EOF` trailer, just not the exact page count). The KA
-scripts use `databricks-sdk`. There is no separate Python deps file for the
-`etl/` scripts, so install directly if needed:
+The `etl/` scripts pin their Python deps in **`etl/requirements.txt`**: `pypdf`
+(**required** — the downloader aborts without it, because the "> 1 page" check is
+what rejects 1-page Declaration-of-Conformity stubs) and `databricks-sdk` (the KA
+scripts). Install from that file:
 
 ```bash
-uv pip install requests pypdf databricks-sdk   # or: pip install ...
+uv pip install -r etl/requirements.txt   # or: pip install -r etl/requirements.txt
 ```
 
 Set your target once (FEVM defaults shown); every runnable command below uses these:
@@ -147,14 +148,24 @@ export CATALOG=nikks_fevm_workspace_7405607030687545 SCHEMA=techsummit VOLUME=ra
 ### 1. Download + upload the manuals
 
 Idempotent and re-runnable. Stages the **real** Bosch manual PDF for each tool —
-8 auto-download (explicit `MANUAL_URLS` + `gbh-2-26` via archive.org), 4 from
-local browser downloads (`LOCAL_MANUALS`) — verifies each one (`%PDF` header,
-non-trivial size, > 1 page), then uploads the verified PDFs PDF-only to the
-`manuals/` subfolder. Real manuals only, **12/12** (three are flagged variant/
-family substitutions; see the "Real manuals only" note above). The upload is
-**additive at the folder level**: it may overwrite same-named PDFs in `manuals/`
-(that is what makes reruns idempotent) but never deletes anything and never
-touches the sibling `datasheets/` folder or the Volume root.
+7 explicit URLs + 1 archive.org fallback (`MANUAL_URLS` + `gbh-2-26` via
+archive.org), 4 from local browser downloads (`LOCAL_MANUALS`) — verifies each one
+(`%PDF` header, non-trivial size, `pypdf`-confirmed > 1 page), then uploads the
+verified PDFs PDF-only to the `manuals/` subfolder. Real manuals only, **12/12**
+(three are flagged variant/family substitutions; see the "Real manuals only" note
+above). The upload is **additive at the folder level**: it may overwrite
+same-named PDFs in `manuals/` (that is what makes reruns idempotent) but never
+deletes anything and never touches the sibling `datasheets/` folder or the Volume
+root.
+
+> **Fail-closed on a partial set.** If any expected tool does not verify, the
+> script uploads **nothing** and exits non-zero (the "expected set" is all 12
+> tools, or exactly the `--only` ids when given). Pass **`--allow-partial`** to
+> upload the verified subset anyway. Staging is **atomic**: each candidate is
+> verified in a temp file and only then atomically replaces the cached PDF, so a
+> failed re-fetch under `--force` never destroys a previously-valid manual. The
+> upload target is guardrailed (schema must be `techsummit`, never `cdp`, catalog
+> must be the FEVM default unless `--allow-catalog-override`).
 
 > **Browser-only manuals (do this before the upload run).** Four manuals cannot
 > be fetched by script — download each in a browser and drop it in `~/Downloads`
