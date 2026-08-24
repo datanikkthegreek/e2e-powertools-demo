@@ -69,17 +69,22 @@ def _validate_target(catalog: str, schema: str, volume: str,
     Mirrors the guardrails in generate_manuals.py: reject '/'/'..'/whitespace in
     any component; schema must be 'techsummit'; never the 'cdp' catalog/schema;
     catalog must be the FEVM default unless --allow-catalog-override is passed.
+    Unity Catalog identifiers are case-insensitive, so name comparisons are done
+    on .strip().lower() — any casing of 'cdp' is refused, any casing of
+    'techsummit' accepted.
     """
+    # Structural checks run FIRST (before any name comparison).
     for label, val in (("catalog", catalog), ("schema", schema), ("volume", volume)):
         if not val or "/" in val or ".." in val or any(c.isspace() for c in val):
             sys.exit(f"[guard] invalid {label} {val!r}: must be non-empty and free "
                      "of '/', '..', and whitespace")
-    if "cdp" in (catalog, schema):
+    cat_n, schema_n = catalog.strip().lower(), schema.strip().lower()
+    if "cdp" in (cat_n, schema_n):
         sys.exit("[guard] refusing to touch the 'cdp' catalog/schema")
-    if schema != DEFAULT_SCHEMA:
+    if schema_n != DEFAULT_SCHEMA.lower():
         sys.exit(f"[guard] schema must be '{DEFAULT_SCHEMA}' (got {schema!r}); this "
                  "demo operates ONLY in techsummit")
-    if catalog != DEFAULT_CATALOG and not allow_catalog_override:
+    if cat_n != DEFAULT_CATALOG.lower() and not allow_catalog_override:
         sys.exit(f"[guard] catalog must be the FEVM default '{DEFAULT_CATALOG}' "
                  f"(got {catalog!r}); pass --allow-catalog-override to target another")
 

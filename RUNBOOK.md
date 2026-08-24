@@ -172,7 +172,9 @@ root.
 > (or pass `--local-dir`) under the **exact filename** below; the script copies it
 > to `etl/data/manuals/<tool-id>.pdf`. (Alternatively, place the PDF directly at
 > `etl/data/manuals/<tool-id>.pdf` and it is reused as-is.) If a file is missing,
-> that one tool is reported and skipped — the run does not fail.
+> sourcing continues past it (that one tool is reported unsourced), but the
+> default full run then exits **non-zero** — pass `--allow-partial` to upload the
+> verified subset anyway.
 >
 > | tool-id | filename in `~/Downloads` | source |
 > |---|---|---|

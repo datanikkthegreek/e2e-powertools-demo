@@ -173,6 +173,12 @@ LOCAL_MANUALS: dict[str, dict] = {
     },
 }
 
+# ── archive.org fallback set (tools intentionally sourced via the IA search) ─────
+# A tool in neither MANUAL_URLS nor LOCAL_MANUALS is only a legitimate archive.org
+# fallback if it is listed here; any OTHER id with no route is an accidental
+# omission (caught by _validate_routes), not a silent archive lookup.
+ARCHIVE_MANUALS: set[str] = {"gbh-2-26"}
+
 # ── variant / family substitution notes (real manuals that are NOT the exact model)
 # Surfaced in the run summary so the reader knows the coverage is honest.
 VARIANT_NOTES: dict[str, str] = {
@@ -495,11 +501,11 @@ def _validate_routes() -> None:
     """Every tool id must resolve to exactly ONE source route.
 
     A tool sources via its explicit URL (MANUAL_URLS), a local browser-download
-    (LOCAL_MANUALS), or — for ids in neither map — the archive.org fallback. This
-    asserts the maps are coherent at startup: no duplicate tool ids, no id in BOTH
-    the URL and local maps (ambiguous route), and neither map referencing an
-    unknown id. Ids in neither map take the archive fallback (a valid single
-    route), so no id can be 'missing'. Fails closed on any coverage gap.
+    (LOCAL_MANUALS), or the archive.org fallback — and the archive route is valid
+    ONLY for ids explicitly listed in ARCHIVE_MANUALS. This asserts the maps are
+    coherent at startup: no duplicate tool ids; no id in more than one route
+    (ambiguous); none of the three maps referencing an unknown id; and no id left
+    with NO route (an accidental omission). Fails closed on any coverage gap.
     """
     tool_ids = [t["id"] for t in TOOLS]
     dupes = sorted({tid for tid in tool_ids if tool_ids.count(tid) > 1})
@@ -512,9 +518,20 @@ def _validate_routes() -> None:
     unknown_local = sorted(set(LOCAL_MANUALS) - known)
     if unknown_local:
         sys.exit(f"[config] LOCAL_MANUALS references unknown tool id(s): {unknown_local}")
-    both = sorted(set(MANUAL_URLS) & set(LOCAL_MANUALS))
-    if both:
-        sys.exit(f"[config] tool id(s) in BOTH URL and local routes (ambiguous): {both}")
+    unknown_archive = sorted(ARCHIVE_MANUALS - known)
+    if unknown_archive:
+        sys.exit(f"[config] ARCHIVE_MANUALS references unknown tool id(s): {unknown_archive}")
+    # Each id must resolve to exactly one route (URL | local | archive).
+    for tid in tool_ids:
+        routes = [name for name, s in (("url", set(MANUAL_URLS)),
+                                       ("local", set(LOCAL_MANUALS)),
+                                       ("archive", ARCHIVE_MANUALS)) if tid in s]
+        if len(routes) > 1:
+            sys.exit(f"[config] {tid!r} is in more than one source route "
+                     f"({', '.join(routes)}) — ambiguous")
+        if not routes:
+            sys.exit(f"[config] {tid!r} has no source route — add it to MANUAL_URLS, "
+                     "LOCAL_MANUALS, or ARCHIVE_MANUALS (accidental omission?)")
 
 
 def _validate_target(catalog: str, schema: str, volume: str,
@@ -524,18 +541,22 @@ def _validate_target(catalog: str, schema: str, volume: str,
     Guardrails: reject '/'/'..'/whitespace in any component (path-redirection);
     the schema must be 'techsummit' (this demo operates ONLY there); the 'cdp'
     catalog/schema is never touched; and the catalog must be the FEVM default
-    unless --allow-catalog-override is passed.
+    unless --allow-catalog-override is passed. Unity Catalog identifiers are
+    case-insensitive, so all name comparisons are done on .strip().lower() —
+    any casing of 'cdp' is refused and any casing of 'techsummit' is accepted.
     """
+    # Structural checks run FIRST (before any name comparison).
     for label, val in (("catalog", catalog), ("schema", schema), ("volume", volume)):
         if not val or "/" in val or ".." in val or any(c.isspace() for c in val):
             sys.exit(f"[guard] invalid {label} {val!r}: must be non-empty and free "
                      "of '/', '..', and whitespace")
-    if "cdp" in (catalog, schema):
+    cat_n, schema_n = catalog.strip().lower(), schema.strip().lower()
+    if "cdp" in (cat_n, schema_n):
         sys.exit("[guard] refusing to touch the 'cdp' catalog/schema")
-    if schema != DEFAULT_SCHEMA:
+    if schema_n != DEFAULT_SCHEMA.lower():
         sys.exit(f"[guard] schema must be '{DEFAULT_SCHEMA}' (got {schema!r}); this "
                  "demo operates ONLY in techsummit")
-    if catalog != DEFAULT_CATALOG and not allow_catalog_override:
+    if cat_n != DEFAULT_CATALOG.lower() and not allow_catalog_override:
         sys.exit(f"[guard] catalog must be the FEVM default '{DEFAULT_CATALOG}' "
                  f"(got {catalog!r}); pass --allow-catalog-override to target another")
 
