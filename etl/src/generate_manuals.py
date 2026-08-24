@@ -52,6 +52,10 @@ HTML_DIR = MANUALS_DIR / "html"
 
 # ── tool identity + specs (grounded in the real Bosch spec class; the datasheet
 #    filenames in etl/data/datasheets/ are the id list) ─────────────────────────
+# NOTE: these specs are hand-authored *representative* values for the tool's real
+# class (rotary hammer / drill / grinder / jigsaw) — synthetic demo content, not
+# validated against an official Bosch source (there is none in the repo). The
+# manuals are explicitly disclaimed as synthetic; see DISCLAIMER above.
 # power: "cordless" (has Battery/Charging section) | "corded" (has Mains section)
 TOOLS: list[dict] = [
     {
@@ -458,8 +462,10 @@ def upload(pdfs: list[Path], catalog: str, schema: str, volume: str, profile: st
     base = f"dbfs:/Volumes/{catalog}/{schema}/{volume}/{VOLUME_SUBFOLDER}"
     # Upload each PDF individually (not `cp -r` on the dir) so the KA source folder
     # stays PDF-only — no local html/ scratch or .gitkeep leaking in as duplicate
-    # retrieval content. This only ADDS to manuals/ and never touches the sibling
-    # datasheets/ folder that IDP reads.
+    # retrieval content. Additive at the folder level: --overwrite replaces a
+    # same-named PDF in manuals/ (that is what makes reruns idempotent) but nothing
+    # is ever deleted, and the sibling datasheets/ folder + Volume root are never
+    # touched (each destination is scoped to manuals/<name>).
     print(f"[up  ] uploading {len(pdfs)} PDFs -> {base}/ (profile {profile})")
     for pdf in pdfs:
         subprocess.run(
