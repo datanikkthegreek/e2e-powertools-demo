@@ -358,8 +358,9 @@ def source_manual(tool: dict, force: bool, local_dir: Path) -> dict:
             return {"id": tid, "status": "present", "path": dest, "detail": detail,
                     "note": note}
 
-    # 1) explicit URL (preferred). On success we are done; on failure we fall
-    #    through to the archive.org search below.
+    # 1) explicit URL (preferred). On success we are done; on failure the tool is
+    #    marked unsourced below (URL-routed tools are NOT searched on archive.org
+    #    — that route is reserved for tools in ARCHIVE_MANUALS).
     explicit = MANUAL_URLS.get(tid)
     if explicit:
         print(f"[url ] {tid}: fetching explicit Bosch URL {explicit}")
