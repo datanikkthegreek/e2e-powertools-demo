@@ -59,10 +59,11 @@ one produced. Run it in exactly this order:
    > `gtm_events` / `lb_*_history` (it does **not** re-run `seed_gtm_events`), so
    > the funnel counts stay put.
 6. **Build:** Knowledge Assistant (manuals) — see the
-   **Knowledge Assistant (product manuals)** section below; it is built
-   **programmatically** via the Databricks **SDK** (`etl/src/create_knowledge_assistant.py`).
-   Genie space (7 base tables) and the Supervisor agent (Genie + Knowledge
-   Assistant) are still built in the UI.
+   **Knowledge Assistant (product manuals)** section below; it is built by
+   running the **`etl/src/create_or_update_knowledge_assistant.ipynb`** notebook
+   in the workspace (Databricks **SDK**, `w.knowledge_assistants`). Genie space
+   (7 base tables) and the Supervisor agent (Genie + Knowledge Assistant) are
+   still built in the UI.
 
 ## Live click-path (to be finalized)
 
@@ -89,33 +90,19 @@ pointed directly at the Volume folder. No `ai_parse_document`, no
 `ai_prep_search`, no streaming tables, no Vector Search index — the KA does its
 own chunking/embedding/retrieval over the PDFs.
 
-> **Real manuals only, 12/12.** `etl/src/generate_manuals.py` stages the genuine
-> Bosch manual PDF for each tool from one of three sources (see the script header):
->
-> - **7 explicit URLs + 1 archive.org fallback** — 7 via an explicit per-tool URL
->   map (`MANUAL_URLS`) on Bosch's own hosts (`bosch-professional.com` + regional
->   `media.*.bosch-pt.*` CDNs under `/binary/manualsmedia/…`, docnum series
->   `160992A…`, plus one `bosch-diy.com/storage/…` DIY manual), and `gbh-2-26` via
->   an **Internet Archive** (archive.org) fallback search. These need no manual steps.
-> - **4 browser-only** — `gsr-18v-55`, `pws-700-115`, `psr-1080-li`,
->   `psb-1800-li-2` come from sources that block scripted download (`gsr-18v-55`'s
->   public copy sits behind Cloudflare on device.report; the other three are
->   discontinued and absent from Bosch's online catalogs). They were downloaded
->   **manually via a browser** and must be placed before the upload step (see the
->   "browser-only manuals" note in step 1). The script's `LOCAL_MANUALS` map
->   copies them from `~/Downloads` (override with `--local-dir`) into
->   `etl/data/manuals/<tool-id>.pdf`.
->
-> Every candidate — URL, local, or archive.org — is verified (`%PDF` header,
-> non-trivial size, and a **`pypdf`-confirmed page count > 1** — `pypdf` is a
-> required dependency, so a 1-page Declaration-of-Conformity stub is rejected)
-> before upload; nothing is synthesized. **Three are
-> honest nearest-variant / family substitutions** for tools with no exact PDF,
-> flagged in the run summary: `pbh-2100-re` → Bosch **PBH 2500 SRE** manual (same
+> **Real manuals only, 12/12 — already staged.** The 12 genuine Bosch manual
+> PDFs are already uploaded to the `manuals/` Volume folder (a one-time
+> destructive upload; the KA is built and grounded over them). Nothing is
+> synthesized. **Three are honest nearest-variant / family substitutions** for
+> tools with no exact PDF: `pbh-2100-re` → Bosch **PBH 2500 SRE** manual (same
 > rotary-hammer family); `psr-1080-li` → Bosch **PSB 1080 LI-2** booklet (same
 > 1080 LI platform); `gws-22-230-jh` → **GWS 22-230 J/P** family booklet (JH is a
-> kit variant of that base tool). The PDFs are git-ignored
-> (`etl/data/manuals/*.pdf`); the script re-fetches/re-stages them.
+> kit variant of that base tool). A few (`gsr-18v-55`, `pws-700-115`,
+> `psr-1080-li`, `psb-1800-li-2`) are browser-sourced (device.report /
+> discontinued catalogs). To re-stage or add a manual, drop the PDF into the
+> Volume folder directly (`databricks fs cp <file>.pdf
+> dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals/<tool-id>.pdf -p $PROFILE`),
+> then re-run the KA notebook to re-sync. There is no downloader script.
 
 The manuals live in a **new `manuals/` subfolder** of the existing `raw_docs`
 Volume — separate from the `datasheets/` folder that IDP reads:
@@ -130,107 +117,61 @@ on the current FEVM target).
 
 ### Prerequisites
 
-The `etl/` scripts pin their Python deps in **`etl/requirements.txt`**: `pypdf`
-(**required** — the downloader aborts without it, because the "> 1 page" check is
-what rejects 1-page Declaration-of-Conformity stubs) and `databricks-sdk` (the KA
-scripts). Install from that file:
+The KA notebook needs **`databricks-sdk`** (see `etl/requirements.txt`). Install
+from that file:
 
 ```bash
 uv pip install -r etl/requirements.txt   # or: pip install -r etl/requirements.txt
 ```
 
-Set your target once (FEVM defaults shown); every runnable command below uses these:
+Set your target once (FEVM defaults shown); the verify command below uses these:
 
 ```bash
 export CATALOG=nikks_fevm_workspace_7405607030687545 SCHEMA=techsummit VOLUME=raw_docs PROFILE=FEVM
 ```
 
-### 1. Download + upload the manuals
+### 1. Manuals in the Volume (already staged)
 
-Idempotent and re-runnable. Stages the **real** Bosch manual PDF for each tool —
-7 explicit URLs + 1 archive.org fallback (`MANUAL_URLS` + `gbh-2-26` via
-archive.org), 4 from local browser downloads (`LOCAL_MANUALS`) — verifies each one
-(`%PDF` header, non-trivial size, `pypdf`-confirmed > 1 page), then uploads the
-verified PDFs PDF-only to the `manuals/` subfolder. Real manuals only, **12/12**
-(three are flagged variant/family substitutions; see the "Real manuals only" note
-above). The upload is **additive at the folder level**: it may overwrite
-same-named PDFs in `manuals/` (that is what makes reruns idempotent) but never
-deletes anything and never touches the sibling `datasheets/` folder or the Volume
-root.
-
-> **Fail-closed on a partial set.** If any expected tool does not verify, the
-> script uploads **nothing** and exits non-zero (the "expected set" is all 12
-> tools, or exactly the `--only` ids when given). Pass **`--allow-partial`** to
-> upload the verified subset anyway. Staging is **atomic**: each candidate is
-> verified in a temp file and only then atomically replaces the cached PDF, so a
-> failed re-fetch under `--force` never destroys a previously-valid manual. The
-> upload target is guardrailed (schema must be `techsummit`, never `cdp`, catalog
-> must be the FEVM default unless `--allow-catalog-override`).
-
-> **Browser-only manuals (do this before the upload run).** Four manuals cannot
-> be fetched by script — download each in a browser and drop it in `~/Downloads`
-> (or pass `--local-dir`) under the **exact filename** below; the script copies it
-> to `etl/data/manuals/<tool-id>.pdf`. (Alternatively, place the PDF directly at
-> `etl/data/manuals/<tool-id>.pdf` and it is reused as-is.) If a file is missing,
-> sourcing continues past it (that one tool is reported unsourced), but the
-> default full run then exits **non-zero** — pass `--allow-partial` to upload the
-> verified subset anyway.
->
-> | tool-id | filename in `~/Downloads` | source |
-> |---|---|---|
-> | `gsr-18v-55` | `512aebc6e0d13e92aa9c018dd2bcbe76e6622e7ff879918a8d6837548591c97a.pdf` | device.report (Cloudflare-blocked to scripts) |
-> | `pws-700-115` | `18f72f.pdf` | discontinued; absent from Bosch catalog |
-> | `psr-1080-li` | `a28d32.pdf` | manualslib.de — Bosch **PSB 1080 LI-2** booklet (nearest variant) |
-> | `psb-1800-li-2` | `41bbc4.pdf` | discontinued; absent from Bosch catalog |
-
-```bash
-# from repo root; the script defaults already target the FEVM catalog/schema/volume + profile
-python etl/src/generate_manuals.py                   # stage + upload
-python etl/src/generate_manuals.py --no-upload       # stage + verify only
-python etl/src/generate_manuals.py --force           # re-fetch even if present
-python etl/src/generate_manuals.py --local-dir ~/Downloads   # browser-only manuals dir
-python etl/src/generate_manuals.py --only gbh-2-26   # one tool (repeatable)
-# override targets explicitly if needed:
-python etl/src/generate_manuals.py \
-  --catalog "$CATALOG" --schema "$SCHEMA" --volume "$VOLUME" --profile "$PROFILE"
-```
-
-Verify the sourced PDFs landed (and datasheets are untouched):
+The 12 real Bosch manual PDFs are already uploaded to the `manuals/` subfolder
+(see the "Real manuals only" note above) — there is no downloader script. Verify
+they are present (and the sibling `datasheets/` folder is untouched):
 
 ```bash
 databricks fs ls dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals -p $PROFILE
 ```
 
-### 2. Create the KA (programmatic — Databricks SDK)
+To re-stage or add a manual, copy the PDF into the folder directly, then re-run
+the KA notebook (step 2) to re-sync:
+
+```bash
+databricks fs cp <file>.pdf \
+  dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals/<tool-id>.pdf -p $PROFILE
+```
+
+### 2. Create-or-update the KA (Databricks SDK notebook)
 
 A KA is **not** a DAB resource (the bundle only includes `resources/*.yml`), so
 it is created/maintained with the Databricks **SDK** (`w.knowledge_assistants`),
-not `bundle deploy`. The logic lives in `etl/src/manage_knowledge_assistant.py`
-(thin SDK helpers) and `etl/src/create_knowledge_assistant.py` (orchestrator);
-the record is `etl/resources/knowledge_assistant.json`.
+not `bundle deploy`. Run **`etl/src/create_or_update_knowledge_assistant.ipynb`**
+in the workspace (it uses ambient `WorkspaceClient()` auth).
 
-**Non-destructive reuse.** `display_name` is unique per workspace, so the
-orchestrator looks the KA up by display name and **REUSES** it (attaches/syncs
-its knowledge source) when it already exists — it never re-creates or deletes.
-One command does the whole create-or-reuse-then-sync:
+**Non-destructive reuse.** `display_name` is unique per workspace, so the notebook
+looks the KA up by display name and **REUSES** it (re-syncs its knowledge source)
+when it already exists — it never re-creates or deletes. The notebook cells are:
 
-```bash
-# from repo root; defaults already target the FEVM catalog/schema/volume + profile
-python etl/src/create_knowledge_assistant.py
+1. **Config** — `WorkspaceClient()`, the `techsummit`-only target guardrail, the
+   Volume path (`/Volumes/…/manuals/`), and the KA display name / description /
+   instructions + knowledge-source display name / description.
+2. **Create-or-update + sync** — if no KA named `powertools-manuals-ka` exists it
+   creates one and attaches the `manuals/` Volume folder as a `files` knowledge
+   source (`powertools-pdf-manuals`); otherwise it reuses the existing KA. Either
+   way it triggers a sync so newly-uploaded manuals get (re)indexed.
+3. **Status** — prints the KA state / endpoint and each knowledge source's state
+   + path.
 
-# override targets explicitly if needed:
-python etl/src/create_knowledge_assistant.py \
-  --catalog "$CATALOG" --schema "$SCHEMA" --volume "$VOLUME" --profile "$PROFILE"
-```
-
-The script self-authenticates via the CLI profile (no tokens written to files).
-On first run it creates the KA (`powertools-manuals-ka`), attaches the
-`manuals/` Volume folder as a `files` knowledge source (`powertools-pdf-manuals`),
-and syncs; on later runs it reuses the existing KA and just re-syncs so newly
-uploaded manuals get re-indexed. The SDK reports the terminal state as
-`KnowledgeAssistantState.ACTIVE` (the knowledge source settles at
-`KnowledgeSourceState.UPDATED`); a full re-index of the real, multi-hundred-page
-manuals takes ~10–15 min, longer than a first build on small stub PDFs.
+The terminal state is `KnowledgeAssistantState.ACTIVE` (the knowledge source
+settles at `KnowledgeSourceState.UPDATED`); a full re-index of the real,
+multi-hundred-page manuals takes ~10–15 min.
 
 Current build (FEVM): `powertools-manuals-ka`,
 `knowledge-assistants/44e78d1c-c243-4def-b0e6-c27638d78c91`, endpoint
@@ -242,11 +183,11 @@ Playground** (pick the KA endpoint) once state is `ACTIVE`.
 > **Deleting a KA is destructive and irreversible** — only do it as a manual last
 > resort (e.g. a genuinely corrupted KA), never as part of a routine rerun. The
 > SDK exposes `w.knowledge_assistants.delete_knowledge_assistant(...)`; the
-> orchestrator deliberately does not wrap it.
+> notebook deliberately does not call it.
 
 ### 2-alt. Create the KA (UI fallback)
 
-If you would rather not run the SDK script, build it in the UI instead:
+If you would rather not run the notebook, build it in the UI instead:
 
 1. Left nav → **Agents** → **Agent Bricks** → **Knowledge Assistant** → **Create**.
 2. **Name:** `powertools-manuals-ka`.
@@ -264,8 +205,8 @@ If you would rather not run the SDK script, build it in the UI instead:
 
 ### 3. Sample questions (retrieval must read the manual to answer)
 
-Target models that were actually **sourced** (check the downloader's run summary;
-fault codes / exact specs now come from the real manuals, not invented ones):
+Target models whose manuals are staged in the Volume (fault codes / exact specs
+come from the real manuals, not invented ones):
 
 - "What tool holder does the GBH 2-26 use, and what is its impact energy?"
 - "How do I fit and remove an SDS-plus bit on the GBH 2-26?"

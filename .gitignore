@@ -11,8 +11,7 @@
 __pycache__/
 *.pyc
 
-# generated synthetic demo manuals (reproducible via etl/src/generate_manuals.py)
-etl/data/manuals/*.pdf
+# manual-sourcing scratch (raw HTML from early attempts) stays out of git; the real manual PDFs ARE committed
 etl/data/manuals/html/
 
 .claude/settings.local.json
