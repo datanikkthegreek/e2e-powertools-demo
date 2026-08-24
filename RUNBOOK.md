@@ -227,12 +227,17 @@ The script self-authenticates via the CLI profile (no tokens written to files).
 On first run it creates the KA (`powertools-manuals-ka`), attaches the
 `manuals/` Volume folder as a `files` knowledge source (`powertools-pdf-manuals`),
 and syncs; on later runs it reuses the existing KA and just re-syncs so newly
-uploaded manuals get re-indexed. Status goes `CREATING → ONLINE` (~2–5 min).
+uploaded manuals get re-indexed. The SDK reports the terminal state as
+`KnowledgeAssistantState.ACTIVE` (the knowledge source settles at
+`KnowledgeSourceState.UPDATED`); a full re-index of the real, multi-hundred-page
+manuals takes ~10–15 min, longer than a first build on small stub PDFs.
 
 Current build (FEVM): `powertools-manuals-ka`,
 `knowledge-assistants/44e78d1c-c243-4def-b0e6-c27638d78c91`, endpoint
-`ka-44e78d1c-endpoint`. Query it from **AI Playground** (pick the KA endpoint)
-once status is `ONLINE`.
+`ka-44e78d1c-endpoint`. Last live run (2026-08-24): the synthetic stub PDFs were
+cleared from `manuals/` and replaced with the **12 real** manuals, then the KA
+was re-synced and reached `ACTIVE` (source `UPDATED`). Query it from **AI
+Playground** (pick the KA endpoint) once state is `ACTIVE`.
 
 > **Deleting a KA is destructive and irreversible** — only do it as a manual last
 > resort (e.g. a genuinely corrupted KA), never as part of a routine rerun. The
@@ -254,7 +259,8 @@ If you would rather not run the SDK script, build it in the UI instead:
 6. **Source description** (paste): _Bosch power-tool operating manuals (PDFs) —
    safety, specs, operation, battery/mains, maintenance, troubleshooting,
    warranty._
-7. **Create**, then wait for status **ONLINE** (~2–5 min) and test in AI Playground.
+7. **Create**, then wait for the KA to reach **ACTIVE** (~10–15 min for a full
+   re-index of the real manuals) and test in AI Playground.
 
 ### 3. Sample questions (retrieval must read the manual to answer)
 
