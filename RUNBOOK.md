@@ -90,14 +90,21 @@ pointed directly at the Volume folder. No `ai_parse_document`, no
 own chunking/embedding/retrieval over the PDFs.
 
 > **Real manuals only.** `etl/src/generate_manuals.py` **downloads** the genuine
-> Bosch manual PDF for each tool from the **Internet Archive** (archive.org) — a
-> scriptable JSON API that serves real "Text PDF" manuals — and verifies each one
-> (`%PDF` header, non-trivial size, > 1 page) before upload. Nothing is
+> Bosch manual PDF for each tool. It prefers an **explicit per-tool URL map**
+> (`MANUAL_URLS`) pointing at the real operating-instructions booklet on Bosch's
+> own hosts (`bosch-professional.com` + regional `media.*.bosch-pt.*` CDNs, under
+> `/binary/manualsmedia/…`, docnum series `160992A…`); tools with no explicit URL
+> fall back to an **Internet Archive** (archive.org) search. Every candidate is
+> verified (`%PDF` header, non-trivial size, > 1 page) before upload. Nothing is
 > synthesized: a tool whose real manual cannot be sourced is **left out and
-> reported as unsourced**, never faked. Coverage is partial by design — the demo
-> tool list is modern (18 V ProCORE / recent DIY) and free manual archives skew
-> older, so several models resolve to unsourced (see the script's run summary).
-> The PDFs are git-ignored (`etl/data/manuals/*.pdf`); the script re-fetches them.
+> reported as unsourced**, never faked. Coverage is **7/12** by design — the demo
+> tool list includes a US-only model whose public copy is bot-walled and several
+> discontinued DIY tools Bosch now serves only as HTML / a 1-page Declaration of
+> Conformity (no multi-page PDF), so those resolve to unsourced (see the script's
+> run summary). One sourced booklet (`gws-22-230-jh`) is the family operating
+> manual for the GWS 22-230 J/P line — the JH is a kit variant of that same base
+> tool. The PDFs are git-ignored (`etl/data/manuals/*.pdf`); the script re-fetches
+> them.
 
 The manuals live in a **new `manuals/` subfolder** of the existing `raw_docs`
 Volume — separate from the `datasheets/` folder that IDP reads:
@@ -131,11 +138,12 @@ export CATALOG=nikks_fevm_workspace_7405607030687545 SCHEMA=techsummit VOLUME=ra
 ### 1. Download + upload the manuals
 
 Idempotent and re-runnable. Downloads the **real** Bosch manual PDF for each tool
-from the Internet Archive (archive.org), verifies each one (`%PDF` header,
+— preferring the explicit Bosch-hosted URL map (`MANUAL_URLS`), falling back to an
+Internet Archive (archive.org) search — verifies each one (`%PDF` header,
 non-trivial size, > 1 page), then uploads the verified PDFs PDF-only to the
 `manuals/` subfolder. Real manuals only — a tool whose manual cannot be sourced
 is left out and reported as **unsourced** in the run summary, never faked
-(coverage is partial by design; see the "Real manuals only" note above). The
+(coverage is 7/12 by design; see the "Real manuals only" note above). The
 upload is **additive at the folder level**: it may overwrite same-named PDFs in
 `manuals/` (that is what makes reruns idempotent) but never deletes anything and
 never touches the sibling `datasheets/` folder or the Volume root.
