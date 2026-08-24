@@ -338,10 +338,14 @@ def _stage_atomically(dest: Path, populate) -> tuple[bool, str]:
 def source_manual(tool: dict, force: bool, local_dir: Path) -> dict:
     """Try to source one tool's real manual. Returns a result dict for reporting.
 
-    Precedence: already-staged verified PDF → explicit URL (MANUAL_URLS) → local
-    browser-download (LOCAL_MANUALS) → archive.org search. A tool listed in
-    LOCAL_MANUALS whose file is missing is reported (not crashed) and does NOT fall
-    through to archive.org (there is no scriptable source for it).
+    Each tool has exactly ONE declared route (enforced by _validate_routes):
+    explicit URL (MANUAL_URLS), local browser-download (LOCAL_MANUALS), or
+    archive.org search (ARCHIVE_MANUALS). Runtime routing honors that declaration:
+    a URL- or local-routed tool that fails is marked UNSOURCED and does NOT fall
+    through to an archive search (so a broken/blocked URL surfaces honestly and the
+    default full run fail-closes per B2). The archive.org search runs only for
+    tools listed in ARCHIVE_MANUALS. An already-staged verified PDF short-circuits
+    everything.
     """
     tid, model = tool["id"], tool["model"]
     dest = MANUALS_DIR / f"{tid}.pdf"
@@ -392,6 +396,24 @@ def source_manual(tool: dict, force: bool, local_dir: Path) -> dict:
             print(f"[warn] {tid}: local staging failed: {exc}")
         return {"id": tid, "status": "unsourced",
                 "detail": f"local file present but unusable: {src}", "note": note}
+
+    # 3) archive.org fallback — ONLY for tools explicitly declared archive-routed
+    #    (ARCHIVE_MANUALS). A URL-routed tool whose download failed above must NOT
+    #    be silently searched on archive: that would violate the "exactly one
+    #    route" invariant and could source an unvetted PDF. Mark it unsourced so
+    #    the default full run fail-closes (B2). Local-routed tools already returned.
+    if tid not in ARCHIVE_MANUALS:
+        if explicit:
+            print(f"[miss] {tid}: explicit URL failed and tool is not "
+                  "archive-routed — unsourced (not searching archive.org)")
+            return {"id": tid, "status": "unsourced",
+                    "detail": "explicit URL failed; not in ARCHIVE_MANUALS",
+                    "note": note}
+        # No URL, no local, not archive-routed — impossible after _validate_routes,
+        # but fail closed rather than perform an undeclared search.
+        print(f"[miss] {tid}: no declared source route — unsourced")
+        return {"id": tid, "status": "unsourced",
+                "detail": "no declared source route", "note": note}
 
     print(f"[find] {tid}: searching archive.org for 'Bosch {model}'")
     try:
