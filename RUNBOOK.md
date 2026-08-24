@@ -89,22 +89,31 @@ pointed directly at the Volume folder. No `ai_parse_document`, no
 `ai_prep_search`, no streaming tables, no Vector Search index — the KA does its
 own chunking/embedding/retrieval over the PDFs.
 
-> **Real manuals only.** `etl/src/generate_manuals.py` **downloads** the genuine
-> Bosch manual PDF for each tool. It prefers an **explicit per-tool URL map**
-> (`MANUAL_URLS`) pointing at the real operating-instructions booklet on Bosch's
-> own hosts (`bosch-professional.com` + regional `media.*.bosch-pt.*` CDNs, under
-> `/binary/manualsmedia/…`, docnum series `160992A…`); tools with no explicit URL
-> fall back to an **Internet Archive** (archive.org) search. Every candidate is
-> verified (`%PDF` header, non-trivial size, > 1 page) before upload. Nothing is
-> synthesized: a tool whose real manual cannot be sourced is **left out and
-> reported as unsourced**, never faked. Coverage is **7/12** by design — the demo
-> tool list includes a US-only model whose public copy is bot-walled and several
-> discontinued DIY tools Bosch now serves only as HTML / a 1-page Declaration of
-> Conformity (no multi-page PDF), so those resolve to unsourced (see the script's
-> run summary). One sourced booklet (`gws-22-230-jh`) is the family operating
-> manual for the GWS 22-230 J/P line — the JH is a kit variant of that same base
-> tool. The PDFs are git-ignored (`etl/data/manuals/*.pdf`); the script re-fetches
-> them.
+> **Real manuals only, 12/12.** `etl/src/generate_manuals.py` stages the genuine
+> Bosch manual PDF for each tool from one of three sources (see the script header):
+>
+> - **8 auto-download** — 7 via an explicit per-tool URL map (`MANUAL_URLS`) on
+>   Bosch's own hosts (`bosch-professional.com` + regional `media.*.bosch-pt.*`
+>   CDNs under `/binary/manualsmedia/…`, docnum series `160992A…`, plus one
+>   `bosch-diy.com/storage/…` DIY manual), and `gbh-2-26` via an **Internet
+>   Archive** (archive.org) fallback search. These need no manual steps.
+> - **4 browser-only** — `gsr-18v-55`, `pws-700-115`, `psr-1080-li`,
+>   `psb-1800-li-2` come from sources that block scripted download (`gsr-18v-55`'s
+>   public copy sits behind Cloudflare on device.report; the other three are
+>   discontinued and absent from Bosch's online catalogs). They were downloaded
+>   **manually via a browser** and must be placed before the upload step (see the
+>   "browser-only manuals" note in step 1). The script's `LOCAL_MANUALS` map
+>   copies them from `~/Downloads` (override with `--local-dir`) into
+>   `etl/data/manuals/<tool-id>.pdf`.
+>
+> Every candidate — URL, local, or archive.org — is verified (`%PDF` header,
+> non-trivial size, > 1 page) before upload; nothing is synthesized. **Three are
+> honest nearest-variant / family substitutions** for tools with no exact PDF,
+> flagged in the run summary: `pbh-2100-re` → Bosch **PBH 2500 SRE** manual (same
+> rotary-hammer family); `psr-1080-li` → Bosch **PSB 1080 LI-2** booklet (same
+> 1080 LI platform); `gws-22-230-jh` → **GWS 22-230 J/P** family booklet (JH is a
+> kit variant of that base tool). The PDFs are git-ignored
+> (`etl/data/manuals/*.pdf`); the script re-fetches/re-stages them.
 
 The manuals live in a **new `manuals/` subfolder** of the existing `raw_docs`
 Volume — separate from the `datasheets/` folder that IDP reads:
@@ -137,22 +146,36 @@ export CATALOG=nikks_fevm_workspace_7405607030687545 SCHEMA=techsummit VOLUME=ra
 
 ### 1. Download + upload the manuals
 
-Idempotent and re-runnable. Downloads the **real** Bosch manual PDF for each tool
-— preferring the explicit Bosch-hosted URL map (`MANUAL_URLS`), falling back to an
-Internet Archive (archive.org) search — verifies each one (`%PDF` header,
+Idempotent and re-runnable. Stages the **real** Bosch manual PDF for each tool —
+8 auto-download (explicit `MANUAL_URLS` + `gbh-2-26` via archive.org), 4 from
+local browser downloads (`LOCAL_MANUALS`) — verifies each one (`%PDF` header,
 non-trivial size, > 1 page), then uploads the verified PDFs PDF-only to the
-`manuals/` subfolder. Real manuals only — a tool whose manual cannot be sourced
-is left out and reported as **unsourced** in the run summary, never faked
-(coverage is 7/12 by design; see the "Real manuals only" note above). The
-upload is **additive at the folder level**: it may overwrite same-named PDFs in
-`manuals/` (that is what makes reruns idempotent) but never deletes anything and
-never touches the sibling `datasheets/` folder or the Volume root.
+`manuals/` subfolder. Real manuals only, **12/12** (three are flagged variant/
+family substitutions; see the "Real manuals only" note above). The upload is
+**additive at the folder level**: it may overwrite same-named PDFs in `manuals/`
+(that is what makes reruns idempotent) but never deletes anything and never
+touches the sibling `datasheets/` folder or the Volume root.
+
+> **Browser-only manuals (do this before the upload run).** Four manuals cannot
+> be fetched by script — download each in a browser and drop it in `~/Downloads`
+> (or pass `--local-dir`) under the **exact filename** below; the script copies it
+> to `etl/data/manuals/<tool-id>.pdf`. (Alternatively, place the PDF directly at
+> `etl/data/manuals/<tool-id>.pdf` and it is reused as-is.) If a file is missing,
+> that one tool is reported and skipped — the run does not fail.
+>
+> | tool-id | filename in `~/Downloads` | source |
+> |---|---|---|
+> | `gsr-18v-55` | `512aebc6e0d13e92aa9c018dd2bcbe76e6622e7ff879918a8d6837548591c97a.pdf` | device.report (Cloudflare-blocked to scripts) |
+> | `pws-700-115` | `18f72f.pdf` | discontinued; absent from Bosch catalog |
+> | `psr-1080-li` | `a28d32.pdf` | manualslib.de — Bosch **PSB 1080 LI-2** booklet (nearest variant) |
+> | `psb-1800-li-2` | `41bbc4.pdf` | discontinued; absent from Bosch catalog |
 
 ```bash
 # from repo root; the script defaults already target the FEVM catalog/schema/volume + profile
-python etl/src/generate_manuals.py                   # download + upload
-python etl/src/generate_manuals.py --no-upload       # download + verify only
-python etl/src/generate_manuals.py --force           # re-download even if present
+python etl/src/generate_manuals.py                   # stage + upload
+python etl/src/generate_manuals.py --no-upload       # stage + verify only
+python etl/src/generate_manuals.py --force           # re-fetch even if present
+python etl/src/generate_manuals.py --local-dir ~/Downloads   # browser-only manuals dir
 python etl/src/generate_manuals.py --only gbh-2-26   # one tool (repeatable)
 # override targets explicitly if needed:
 python etl/src/generate_manuals.py \
