@@ -7,4 +7,8 @@
 # editor
 *.swp
 
+# generated synthetic demo manuals (reproducible via etl/src/generate_manuals.py)
+etl/data/manuals/*.pdf
+etl/data/manuals/html/
+
 .claude/settings.local.json

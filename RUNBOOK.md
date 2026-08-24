@@ -58,8 +58,11 @@ one produced. Run it in exactly this order:
    > A full refresh recomputes the event + CDC tables from the existing
    > `gtm_events` / `lb_*_history` (it does **not** re-run `seed_gtm_events`), so
    > the funnel counts stay put.
-6. **Build (UI):** Knowledge Assistant (manuals), Genie space (7 base tables),
-   Supervisor agent (Genie + Knowledge Assistant).
+6. **Build:** Knowledge Assistant (manuals) — see the
+   **Knowledge Assistant (product manuals)** section below; it can now be built
+   **programmatically** via the `databricks knowledge-assistants` CLI. Genie
+   space (7 base tables) and the Supervisor agent (Genie + Knowledge Assistant)
+   are still built in the UI.
 
 ## Live click-path (to be finalized)
 
@@ -77,3 +80,111 @@ one produced. Run it in exactly this order:
 ## Exact questions to ask
 
 _TODO: paste the finalized Genie / KA / Supervisor prompts here after rehearsal._
+
+## Knowledge Assistant (product manuals)
+
+A Databricks **Agent Bricks Knowledge Assistant** (KA) for RAG Q&A over the 12
+power-tool **manuals**. This is the *simple* path: manuals → UC Volume → KA
+pointed directly at the Volume folder. No `ai_parse_document`, no
+`ai_prep_search`, no streaming tables, no Vector Search index — the KA does its
+own chunking/embedding/retrieval over the PDFs.
+
+> **Synthetic content.** We cannot legally redistribute real Bosch manuals, so
+> the 12 manuals are **synthetic demo documents** generated from each tool's real
+> spec class. Every page footer and cover carry
+> _"Synthetic demo content — not an official Bosch document."_ The generator,
+> `etl/src/generate_manuals.py`, is the reproducible source of truth; the PDFs
+> are git-ignored (`etl/data/manuals/*.pdf`).
+
+The manuals live in a **new `manuals/` subfolder** of the existing `raw_docs`
+Volume — separate from the `datasheets/` folder that IDP reads:
+`/Volumes/${var.catalog}/${var.schema}/${var.volume}/manuals/`
+(resolves to
+`/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/raw_docs/manuals/`
+on the current FEVM target).
+
+### 1. Generate + upload the manuals
+
+Idempotent and re-runnable. Renders 12 multi-page PDFs (Safety, Technical
+Specifications, Intended Use, Operating Instructions, Battery/Charging *or*
+Mains, Maintenance & Cleaning, Troubleshooting, Warranty & Service) via
+`weasyprint`, then uploads them PDF-only to the Volume subfolder — it never
+touches the sibling `datasheets/`.
+
+```bash
+# from repo root; defaults target the FEVM catalog/schema/volume + profile
+python etl/src/generate_manuals.py            # generate + upload
+python etl/src/generate_manuals.py --no-upload  # local PDFs only
+python etl/src/generate_manuals.py --force      # re-render even if up to date
+# override targets if needed:
+python etl/src/generate_manuals.py \
+  --catalog ${var.catalog} --schema ${var.schema} --volume ${var.volume} --profile FEVM
+```
+
+Verify the 12 PDFs landed (and datasheets are untouched):
+
+```bash
+databricks fs ls dbfs:/Volumes/${var.catalog}/${var.schema}/${var.volume}/manuals -p FEVM
+```
+
+### 2. Create the KA (programmatic — `databricks knowledge-assistants`, Beta)
+
+A KA is **not** a DAB resource (no `bundle` verb as of CLI v1.4.0), so it is
+created with the Beta `databricks knowledge-assistants` CLI, not `bundle
+deploy`. The spec is recorded in `etl/resources/knowledge_assistant.json`
+(that file is a record, not a DAB resource — the bundle only includes
+`resources/*.yml`). Exact commands used:
+
+```bash
+# a) create the assistant (display_name must be unique per workspace)
+databricks knowledge-assistants create-knowledge-assistant \
+  "powertools-manuals-ka" \
+  "Answers questions about Bosch power-tool product manuals ... (SYNTHETIC demo)." \
+  --instructions "Answer only from the retrieved product manuals and always cite the source manual. ..." \
+  -p FEVM
+# → returns name = knowledge-assistants/{ka_id} and endpoint_name = ka-<short>-endpoint
+
+# b) add the Volume folder as a "files" knowledge source
+databricks knowledge-assistants create-knowledge-source \
+  "knowledge-assistants/{ka_id}" \
+  --json '{
+    "display_name": "Product manuals",
+    "description": "Synthetic Bosch power-tool operating manuals (12 PDFs) ...",
+    "source_type": "files",
+    "files": {"path": "/Volumes/${var.catalog}/${var.schema}/${var.volume}/manuals/"}
+  }' -p FEVM
+
+# c) sync + poll status (CREATING → ONLINE, ~2–5 min)
+databricks knowledge-assistants sync-knowledge-sources "knowledge-assistants/{ka_id}" -p FEVM
+databricks knowledge-assistants get-knowledge-assistant  "knowledge-assistants/{ka_id}" -p FEVM
+```
+
+Current build (FEVM): `powertools-manuals-ka`,
+`knowledge-assistants/44e78d1c-c243-4def-b0e6-c27638d78c91`, endpoint
+`ka-44e78d1c-endpoint`. Query it from **AI Playground** (pick the KA endpoint)
+once status is `ONLINE`.
+
+### 2-alt. Create the KA (UI fallback)
+
+If the Beta CLI is unavailable, build it in the UI instead:
+
+1. Left nav → **Agents** → **Agent Bricks** → **Knowledge Assistant** → **Create**.
+2. **Name:** `powertools-manuals-ka`.
+3. **Description** (paste): _Answers questions about Bosch power-tool product
+   manuals (safety, specifications, operation, battery/charging or mains,
+   maintenance, troubleshooting, warranty) for 12 tools. Content is SYNTHETIC
+   demo material, not official Bosch documentation._
+4. **Add knowledge source** → **Files in a Unity Catalog Volume**.
+5. **Volume path** (paste exactly):
+   `/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/raw_docs/manuals/`
+6. **Source description** (paste): _Synthetic Bosch power-tool operating manuals
+   (12 PDFs) — safety, specs, operation, battery/mains, maintenance,
+   troubleshooting, warranty._
+7. **Create**, then wait for status **ONLINE** (~2–5 min) and test in AI Playground.
+
+### 3. Sample questions (retrieval must read the manual to answer)
+
+- "What is the impact energy of the GBH 18V-26 F, and what does fault code E01 mean?"
+- "How do I change the blade on the GST 18V-LI S jigsaw?"
+- "What triggers KickBack Control on the GWS 18V-10 and how do I restart the tool?"
+- "What extension-lead cross-section does the GWS 22-230 JH need?"
