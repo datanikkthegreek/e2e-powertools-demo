@@ -1,0 +1,6 @@
+# Python dependencies for the etl/src helper scripts.
+#   pip install -r etl/requirements.txt   (or: uv pip install -r etl/requirements.txt)
+#
+# databricks-sdk backs the Knowledge Assistant notebook (w.knowledge_assistants).
+# Pinned to the version this work was verified against.
+databricks-sdk>=0.126.0

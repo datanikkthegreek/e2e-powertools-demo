@@ -58,8 +58,12 @@ one produced. Run it in exactly this order:
    > A full refresh recomputes the event + CDC tables from the existing
    > `gtm_events` / `lb_*_history` (it does **not** re-run `seed_gtm_events`), so
    > the funnel counts stay put.
-6. **Build (UI):** Knowledge Assistant (manuals), Genie space (7 base tables),
-   Supervisor agent (Genie + Knowledge Assistant).
+6. **Build:** Knowledge Assistant (manuals) — see the
+   **Knowledge Assistant (product manuals)** section below; it is built by
+   running the **`etl/src/create_or_update_knowledge_assistant.ipynb`** notebook
+   in the workspace (Databricks **SDK**, `w.knowledge_assistants`). Genie space
+   (7 base tables) and the Supervisor agent (Genie + Knowledge Assistant) are
+   still built in the UI.
 
 ## Live click-path (to be finalized)
 
@@ -77,3 +81,134 @@ one produced. Run it in exactly this order:
 ## Exact questions to ask
 
 _TODO: paste the finalized Genie / KA / Supervisor prompts here after rehearsal._
+
+## Knowledge Assistant (product manuals)
+
+A Databricks **Agent Bricks Knowledge Assistant** (KA) for RAG Q&A over the 12
+power-tool **manuals**. This is the *simple* path: manuals → UC Volume → KA
+pointed directly at the Volume folder. No `ai_parse_document`, no
+`ai_prep_search`, no streaming tables, no Vector Search index — the KA does its
+own chunking/embedding/retrieval over the PDFs.
+
+> **Real manuals only, 12/12 — already staged.** The 12 genuine Bosch manual
+> PDFs are already uploaded to the `manuals/` Volume folder (a one-time
+> destructive upload; the KA is built and grounded over them). Nothing is
+> synthesized. **Three are honest nearest-variant / family substitutions** for
+> tools with no exact PDF: `pbh-2100-re` → Bosch **PBH 2500 SRE** manual (same
+> rotary-hammer family); `psr-1080-li` → Bosch **PSB 1080 LI-2** booklet (same
+> 1080 LI platform); `gws-22-230-jh` → **GWS 22-230 J/P** family booklet (JH is a
+> kit variant of that base tool). A few (`gsr-18v-55`, `pws-700-115`,
+> `psr-1080-li`, `psb-1800-li-2`) are browser-sourced (device.report /
+> discontinued catalogs). To re-stage or add a manual, drop the PDF into the
+> Volume folder directly (`databricks fs cp <file>.pdf
+> dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals/<tool-id>.pdf -p $PROFILE`),
+> then re-run the KA notebook to re-sync. There is no downloader script.
+
+The manuals live in a **new `manuals/` subfolder** of the existing `raw_docs`
+Volume — separate from the `datasheets/` folder that IDP reads:
+`/Volumes/${var.catalog}/${var.schema}/${var.volume}/manuals/`
+(resolves to
+`/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/raw_docs/manuals/`
+on the current FEVM target).
+
+> The `${var.catalog}/${var.schema}/${var.volume}` above is the **DAB-variable
+> reference** (see `etl/databricks.yml`), not shell syntax. The runnable commands
+> below use plain shell `$CATALOG/$SCHEMA/$VOLUME/$PROFILE` so they paste-and-run.
+
+### Prerequisites
+
+The KA notebook needs **`databricks-sdk`** (see `etl/requirements.txt`). Install
+from that file:
+
+```bash
+uv pip install -r etl/requirements.txt   # or: pip install -r etl/requirements.txt
+```
+
+Set your target once (FEVM defaults shown); the verify command below uses these:
+
+```bash
+export CATALOG=nikks_fevm_workspace_7405607030687545 SCHEMA=techsummit VOLUME=raw_docs PROFILE=FEVM
+```
+
+### 1. Manuals in the Volume (already staged)
+
+The 12 real Bosch manual PDFs are already uploaded to the `manuals/` subfolder
+(see the "Real manuals only" note above) — there is no downloader script. Verify
+they are present (and the sibling `datasheets/` folder is untouched):
+
+```bash
+databricks fs ls dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals -p $PROFILE
+```
+
+To re-stage or add a manual, copy the PDF into the folder directly, then re-run
+the KA notebook (step 2) to re-sync:
+
+```bash
+databricks fs cp <file>.pdf \
+  dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals/<tool-id>.pdf -p $PROFILE
+```
+
+### 2. Create-or-update the KA (Databricks SDK notebook)
+
+A KA is **not** a DAB resource (the bundle only includes `resources/*.yml`), so
+it is created/maintained with the Databricks **SDK** (`w.knowledge_assistants`),
+not `bundle deploy`. Run **`etl/src/create_or_update_knowledge_assistant.ipynb`**
+in the workspace (it uses ambient `WorkspaceClient()` auth).
+
+**Non-destructive reuse.** `display_name` is unique per workspace, so the notebook
+looks the KA up by display name and **REUSES** it (re-syncs its knowledge source)
+when it already exists — it never re-creates or deletes. The notebook cells are:
+
+1. **Config** — `WorkspaceClient()`, the `techsummit`-only target guardrail, the
+   Volume path (`/Volumes/…/manuals/`), and the KA display name / description /
+   instructions + knowledge-source display name / description.
+2. **Create-or-update + sync** — if no KA named `powertools-manuals-ka` exists it
+   creates one and attaches the `manuals/` Volume folder as a `files` knowledge
+   source (`powertools-pdf-manuals`); otherwise it reuses the existing KA. Either
+   way it triggers a sync so newly-uploaded manuals get (re)indexed.
+3. **Status** — prints the KA state / endpoint and each knowledge source's state
+   + path.
+
+The terminal state is `KnowledgeAssistantState.ACTIVE` (the knowledge source
+settles at `KnowledgeSourceState.UPDATED`); a full re-index of the real,
+multi-hundred-page manuals takes ~10–15 min.
+
+Current build (FEVM): `powertools-manuals-ka`,
+`knowledge-assistants/44e78d1c-c243-4def-b0e6-c27638d78c91`, endpoint
+`ka-44e78d1c-endpoint`. Last live run (2026-08-24): the synthetic stub PDFs were
+cleared from `manuals/` and replaced with the **12 real** manuals, then the KA
+was re-synced and reached `ACTIVE` (source `UPDATED`). Query it from **AI
+Playground** (pick the KA endpoint) once state is `ACTIVE`.
+
+> **Deleting a KA is destructive and irreversible** — only do it as a manual last
+> resort (e.g. a genuinely corrupted KA), never as part of a routine rerun. The
+> SDK exposes `w.knowledge_assistants.delete_knowledge_assistant(...)`; the
+> notebook deliberately does not call it.
+
+### 2-alt. Create the KA (UI fallback)
+
+If you would rather not run the notebook, build it in the UI instead:
+
+1. Left nav → **Agents** → **Agent Bricks** → **Knowledge Assistant** → **Create**.
+2. **Name:** `powertools-manuals-ka`.
+3. **Description** (paste): _Answers questions about Bosch power-tool product
+   manuals (safety, specifications, operation, battery/charging or mains,
+   maintenance, troubleshooting, warranty)._
+4. **Add knowledge source** → **Files in a Unity Catalog Volume**.
+5. **Volume path** (paste exactly):
+   `/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/raw_docs/manuals/`
+6. **Source description** (paste): _Bosch power-tool operating manuals (PDFs) —
+   safety, specs, operation, battery/mains, maintenance, troubleshooting,
+   warranty._
+7. **Create**, then wait for the KA to reach **ACTIVE** (~10–15 min for a full
+   re-index of the real manuals) and test in AI Playground.
+
+### 3. Sample questions (retrieval must read the manual to answer)
+
+Target models whose manuals are staged in the Volume (fault codes / exact specs
+come from the real manuals, not invented ones):
+
+- "What tool holder does the GBH 2-26 use, and what is its impact energy?"
+- "How do I fit and remove an SDS-plus bit on the GBH 2-26?"
+- "What does the GBH 2-26 manual say about the vibration control / auxiliary handle?"
+- "What maintenance intervals does the GBH 2-26 manual recommend?"

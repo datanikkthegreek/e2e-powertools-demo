@@ -7,4 +7,11 @@
 # editor
 *.swp
 
+# python
+__pycache__/
+*.pyc
+
+# manual-sourcing scratch (raw HTML from early attempts) stays out of git; the real manual PDFs ARE committed
+etl/data/manuals/html/
+
 .claude/settings.local.json
