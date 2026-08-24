@@ -59,10 +59,10 @@ one produced. Run it in exactly this order:
    > `gtm_events` / `lb_*_history` (it does **not** re-run `seed_gtm_events`), so
    > the funnel counts stay put.
 6. **Build:** Knowledge Assistant (manuals) — see the
-   **Knowledge Assistant (product manuals)** section below; it can now be built
-   **programmatically** via the `databricks knowledge-assistants` CLI. Genie
-   space (7 base tables) and the Supervisor agent (Genie + Knowledge Assistant)
-   are still built in the UI.
+   **Knowledge Assistant (product manuals)** section below; it is built
+   **programmatically** via the Databricks **SDK** (`etl/src/create_knowledge_assistant.py`).
+   Genie space (7 base tables) and the Supervisor agent (Genie + Knowledge
+   Assistant) are still built in the UI.
 
 ## Live click-path (to be finalized)
 
@@ -89,12 +89,15 @@ pointed directly at the Volume folder. No `ai_parse_document`, no
 `ai_prep_search`, no streaming tables, no Vector Search index — the KA does its
 own chunking/embedding/retrieval over the PDFs.
 
-> **Synthetic content.** We cannot legally redistribute real Bosch manuals, so
-> the 12 manuals are **synthetic demo documents** generated from each tool's real
-> spec class. Every page footer and cover carry
-> _"Synthetic demo content — not an official Bosch document."_ The generator,
-> `etl/src/generate_manuals.py`, is the reproducible source of truth; the PDFs
-> are git-ignored (`etl/data/manuals/*.pdf`).
+> **Real manuals only.** `etl/src/generate_manuals.py` **downloads** the genuine
+> Bosch manual PDF for each tool from the **Internet Archive** (archive.org) — a
+> scriptable JSON API that serves real "Text PDF" manuals — and verifies each one
+> (`%PDF` header, non-trivial size, > 1 page) before upload. Nothing is
+> synthesized: a tool whose real manual cannot be sourced is **left out and
+> reported as unsourced**, never faked. Coverage is partial by design — the demo
+> tool list is modern (18 V ProCORE / recent DIY) and free manual archives skew
+> older, so several models resolve to unsourced (see the script's run summary).
+> The PDFs are git-ignored (`etl/data/manuals/*.pdf`); the script re-fetches them.
 
 The manuals live in a **new `manuals/` subfolder** of the existing `raw_docs`
 Volume — separate from the `datasheets/` folder that IDP reads:
@@ -109,14 +112,14 @@ on the current FEVM target).
 
 ### Prerequisites
 
-The generator renders PDFs with **weasyprint**, which needs its native libraries
-(Pango, Cairo, GDK-PixBuf). There is no separate Python deps file for the `etl/`
-scripts, so install it directly:
+The downloader uses `requests` (usually already present) and, for the ">1 page"
+PDF verification, `pypdf` (optional — without it the script still checks the
+`%PDF` header, size, and `%%EOF` trailer, just not the exact page count). The KA
+scripts use `databricks-sdk`. There is no separate Python deps file for the
+`etl/` scripts, so install directly if needed:
 
 ```bash
-uv pip install "weasyprint>=62"          # or: pip install "weasyprint>=62"
-# native libs — macOS:          brew install pango cairo gdk-pixbuf
-# native libs — Debian/Ubuntu:  apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0
+uv pip install requests pypdf databricks-sdk   # or: pip install ...
 ```
 
 Set your target once (FEVM defaults shown); every runnable command below uses these:
@@ -125,76 +128,62 @@ Set your target once (FEVM defaults shown); every runnable command below uses th
 export CATALOG=nikks_fevm_workspace_7405607030687545 SCHEMA=techsummit VOLUME=raw_docs PROFILE=FEVM
 ```
 
-### 1. Generate + upload the manuals
+### 1. Download + upload the manuals
 
-Idempotent and re-runnable. Renders 12 multi-page PDFs (Safety, Technical
-Specifications, Intended Use, Operating Instructions, Battery/Charging *or*
-Mains, Maintenance & Cleaning, Troubleshooting, Warranty & Service) via
-`weasyprint`, then uploads them PDF-only to the `manuals/` subfolder. The upload
-is **additive at the folder level**: it may overwrite same-named PDFs in
+Idempotent and re-runnable. Downloads the **real** Bosch manual PDF for each tool
+from the Internet Archive (archive.org), verifies each one (`%PDF` header,
+non-trivial size, > 1 page), then uploads the verified PDFs PDF-only to the
+`manuals/` subfolder. Real manuals only — a tool whose manual cannot be sourced
+is left out and reported as **unsourced** in the run summary, never faked
+(coverage is partial by design; see the "Real manuals only" note above). The
+upload is **additive at the folder level**: it may overwrite same-named PDFs in
 `manuals/` (that is what makes reruns idempotent) but never deletes anything and
 never touches the sibling `datasheets/` folder or the Volume root.
 
 ```bash
 # from repo root; the script defaults already target the FEVM catalog/schema/volume + profile
-python etl/src/generate_manuals.py              # generate + upload
-python etl/src/generate_manuals.py --no-upload  # local PDFs only
-python etl/src/generate_manuals.py --force      # re-render even if up to date
+python etl/src/generate_manuals.py                   # download + upload
+python etl/src/generate_manuals.py --no-upload       # download + verify only
+python etl/src/generate_manuals.py --force           # re-download even if present
+python etl/src/generate_manuals.py --only gbh-2-26   # one tool (repeatable)
 # override targets explicitly if needed:
 python etl/src/generate_manuals.py \
   --catalog "$CATALOG" --schema "$SCHEMA" --volume "$VOLUME" --profile "$PROFILE"
 ```
 
-Verify the 12 PDFs landed (and datasheets are untouched):
+Verify the sourced PDFs landed (and datasheets are untouched):
 
 ```bash
 databricks fs ls dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals -p $PROFILE
 ```
 
-### 2. Create the KA (programmatic — `databricks knowledge-assistants`, Beta)
+### 2. Create the KA (programmatic — Databricks SDK)
 
-A KA is **not** a DAB resource (no `bundle` verb as of CLI v1.4.0), so it is
-created with the Beta `databricks knowledge-assistants` CLI, not `bundle
-deploy`. The spec is recorded in `etl/resources/knowledge_assistant.json`
-(that file is a record, not a DAB resource — the bundle only includes
-`resources/*.yml`). Exact commands used:
+A KA is **not** a DAB resource (the bundle only includes `resources/*.yml`), so
+it is created/maintained with the Databricks **SDK** (`w.knowledge_assistants`),
+not `bundle deploy`. The logic lives in `etl/src/manage_knowledge_assistant.py`
+(thin SDK helpers) and `etl/src/create_knowledge_assistant.py` (orchestrator);
+the record is `etl/resources/knowledge_assistant.json`.
 
-**On rerun, reuse — don't recreate.** `display_name` is unique per workspace, so
-first look the KA up and reuse it (add/sync its knowledge source) rather than
-recreating it:
-
-```bash
-# reuse if it already exists — grab the resource name (knowledge-assistants/{ka_id})
-databricks knowledge-assistants list-knowledge-assistants -p $PROFILE -o json \
-  | jq -r '.[] | select(.display_name=="powertools-manuals-ka") | .name'
-```
-
-If that prints a name, skip step (a) and go straight to (b)/(c) against it.
-Otherwise create it:
+**Non-destructive reuse.** `display_name` is unique per workspace, so the
+orchestrator looks the KA up by display name and **REUSES** it (attaches/syncs
+its knowledge source) when it already exists — it never re-creates or deletes.
+One command does the whole create-or-reuse-then-sync:
 
 ```bash
-# a) create the assistant (display_name must be unique per workspace)
-databricks knowledge-assistants create-knowledge-assistant \
-  "powertools-manuals-ka" \
-  "Answers questions about Bosch power-tool product manuals ... (SYNTHETIC demo)." \
-  --instructions "Answer only from the retrieved product manuals and always cite the source manual. ..." \
-  -p $PROFILE
-# → returns name = knowledge-assistants/{ka_id} and endpoint_name = ka-<short>-endpoint
+# from repo root; defaults already target the FEVM catalog/schema/volume + profile
+python etl/src/create_knowledge_assistant.py
 
-# b) add the Volume folder as a "files" knowledge source
-databricks knowledge-assistants create-knowledge-source \
-  "knowledge-assistants/{ka_id}" \
-  --json "{
-    \"display_name\": \"Product manuals\",
-    \"description\": \"Synthetic Bosch power-tool operating manuals (12 PDFs) ...\",
-    \"source_type\": \"files\",
-    \"files\": {\"path\": \"/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals/\"}
-  }" -p $PROFILE
-
-# c) sync + poll status (CREATING → ONLINE, ~2–5 min)
-databricks knowledge-assistants sync-knowledge-sources "knowledge-assistants/{ka_id}" -p $PROFILE
-databricks knowledge-assistants get-knowledge-assistant  "knowledge-assistants/{ka_id}" -p $PROFILE
+# override targets explicitly if needed:
+python etl/src/create_knowledge_assistant.py \
+  --catalog "$CATALOG" --schema "$SCHEMA" --volume "$VOLUME" --profile "$PROFILE"
 ```
+
+The script self-authenticates via the CLI profile (no tokens written to files).
+On first run it creates the KA (`powertools-manuals-ka`), attaches the
+`manuals/` Volume folder as a `files` knowledge source (`powertools-pdf-manuals`),
+and syncs; on later runs it reuses the existing KA and just re-syncs so newly
+uploaded manuals get re-indexed. Status goes `CREATING → ONLINE` (~2–5 min).
 
 Current build (FEVM): `powertools-manuals-ka`,
 `knowledge-assistants/44e78d1c-c243-4def-b0e6-c27638d78c91`, endpoint
@@ -202,30 +191,33 @@ Current build (FEVM): `powertools-manuals-ka`,
 once status is `ONLINE`.
 
 > **Deleting a KA is destructive and irreversible** — only do it as a manual last
-> resort (e.g. a genuinely corrupted KA), never as part of a routine rerun:
-> `databricks knowledge-assistants delete-knowledge-assistant "knowledge-assistants/{ka_id}" -p $PROFILE`.
+> resort (e.g. a genuinely corrupted KA), never as part of a routine rerun. The
+> SDK exposes `w.knowledge_assistants.delete_knowledge_assistant(...)`; the
+> orchestrator deliberately does not wrap it.
 
 ### 2-alt. Create the KA (UI fallback)
 
-If the Beta CLI is unavailable, build it in the UI instead:
+If you would rather not run the SDK script, build it in the UI instead:
 
 1. Left nav → **Agents** → **Agent Bricks** → **Knowledge Assistant** → **Create**.
 2. **Name:** `powertools-manuals-ka`.
 3. **Description** (paste): _Answers questions about Bosch power-tool product
    manuals (safety, specifications, operation, battery/charging or mains,
-   maintenance, troubleshooting, warranty) for 12 tools. Content is SYNTHETIC
-   demo material, not official Bosch documentation._
+   maintenance, troubleshooting, warranty)._
 4. **Add knowledge source** → **Files in a Unity Catalog Volume**.
 5. **Volume path** (paste exactly):
    `/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/raw_docs/manuals/`
-6. **Source description** (paste): _Synthetic Bosch power-tool operating manuals
-   (12 PDFs) — safety, specs, operation, battery/mains, maintenance,
-   troubleshooting, warranty._
+6. **Source description** (paste): _Bosch power-tool operating manuals (PDFs) —
+   safety, specs, operation, battery/mains, maintenance, troubleshooting,
+   warranty._
 7. **Create**, then wait for status **ONLINE** (~2–5 min) and test in AI Playground.
 
 ### 3. Sample questions (retrieval must read the manual to answer)
 
-- "What is the impact energy of the GBH 18V-26 F, and what does fault code E01 mean?"
-- "How do I change the blade on the GST 18V-LI S jigsaw?"
-- "What triggers KickBack Control on the GWS 18V-10 and how do I restart the tool?"
-- "What extension-lead cross-section does the GWS 22-230 JH need?"
+Target models that were actually **sourced** (check the downloader's run summary;
+fault codes / exact specs now come from the real manuals, not invented ones):
+
+- "What tool holder does the GBH 2-26 use, and what is its impact energy?"
+- "How do I fit and remove an SDS-plus bit on the GBH 2-26?"
+- "What does the GBH 2-26 manual say about the vibration control / auxiliary handle?"
+- "What maintenance intervals does the GBH 2-26 manual recommend?"
