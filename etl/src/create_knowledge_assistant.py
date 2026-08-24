@@ -28,9 +28,12 @@ from databricks.sdk import WorkspaceClient
 from manage_knowledge_assistant import (
     create_knowledge_assistant,
     create_knowledge_source_files,
+    get_knowledge_assistant,
     get_knowledge_assistant_id_by_display_name,
     list_knowledge_sources,
     sync_knowledge_sources,
+    update_knowledge_assistant_metadata,
+    update_knowledge_source_description,
 )
 
 # ── defaults (match etl/databricks.yml vars + the demo guardrails) ─────────────
@@ -45,15 +48,18 @@ VOLUME_SUBFOLDER = "manuals"
 # build) rather than minting a duplicate.
 DISPLAY_NAME = "powertools-manuals-ka"
 DESCRIPTION = (
-    "Answers questions about Bosch power-tool product manuals (safety, "
+    "Answers questions about real Bosch power-tool operating manuals (safety, "
     "specifications, operation, battery/charging or mains, maintenance, "
-    "troubleshooting, warranty). RAG over the PDFs in the manuals/ Volume folder."
+    "troubleshooting, warranty) for the 12 demo power tools. RAG over the PDFs in "
+    "the manuals/ Volume folder. A few tools are covered by their nearest-variant "
+    "or family manual (e.g. psr-1080-li uses the Bosch PSB 1080 LI-2 booklet)."
 )
 INSTRUCTIONS = (
     "Answer only from the retrieved product manuals and always cite the source "
     "manual. Identify the specific tool model (e.g. GBH 2-26) the question is "
     "about. If a spec or fault code is not in the manuals, say so rather than "
-    "guessing."
+    "guessing. A few tools are documented by their nearest-variant manual "
+    "(e.g. psr-1080-li -> Bosch PSB 1080 LI-2); cite the actual manual retrieved."
 )
 SOURCE_DISPLAY_NAME = "powertools-pdf-manuals"
 SOURCE_DESCRIPTION = (
@@ -141,6 +147,16 @@ def main() -> None:
             f"[ka  ] reusing existing knowledge-assistants/{ka_id} "
             f"({DISPLAY_NAME!r}) — no re-create, no delete"
         )
+        # Bring the live KA's description/instructions back in sync with the
+        # committed config (idempotent PATCH; only these two fields, via FieldMask).
+        live = get_knowledge_assistant(w, ka_id)
+        if (live.description or "") != DESCRIPTION or (live.instructions or "") != INSTRUCTIONS:
+            print("[ka  ] updating description/instructions to match config")
+            update_knowledge_assistant_metadata(
+                w, ka_id, DISPLAY_NAME, DESCRIPTION, INSTRUCTIONS
+            )
+        else:
+            print("[ka  ] description/instructions already in sync — no update")
         want = volume_path.rstrip("/")
         existing = list(list_knowledge_sources(w, ka_id))
         matched = [s for s in existing if _source_path(s).rstrip("/") == want]
@@ -149,6 +165,13 @@ def main() -> None:
                 f"[src ] found existing files source at {volume_path} "
                 f"({len(matched)} match) — reusing it"
             )
+            # Keep the source description factually accurate too (metadata-only).
+            for s in matched:
+                if (getattr(s, "description", "") or "") != SOURCE_DESCRIPTION:
+                    print("[src ] updating source description to match config")
+                    update_knowledge_source_description(
+                        w, s.name, s.display_name, s.source_type, SOURCE_DESCRIPTION
+                    )
         else:
             paths = ", ".join(_source_path(s) or "?" for s in existing) or "none"
             print(

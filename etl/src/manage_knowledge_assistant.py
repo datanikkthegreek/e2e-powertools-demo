@@ -76,6 +76,34 @@ def get_knowledge_assistant(w: WorkspaceClient, assistant_id: str) -> KnowledgeA
     )
 
 
+def update_knowledge_assistant_metadata(
+    w: WorkspaceClient,
+    assistant_id: str,
+    display_name: str,
+    description: str,
+    instructions: str,
+) -> KnowledgeAssistant:
+    """Patch an existing KA's ``description`` and ``instructions`` in place.
+
+    Idempotent metadata update (no re-create, no delete): reuses the existing KA
+    id and only touches the two fields named in the FieldMask. ``display_name`` is
+    required by the ``KnowledgeAssistant`` constructor but is NOT in the mask, so
+    it is left unchanged. Used to bring the live KA's text back in sync with the
+    committed config after content changes.
+    """
+    from google.protobuf.field_mask_pb2 import FieldMask
+
+    return w.knowledge_assistants.update_knowledge_assistant(
+        name=f"knowledge-assistants/{assistant_id}",
+        knowledge_assistant=KnowledgeAssistant(
+            display_name=display_name,
+            description=description,
+            instructions=instructions,
+        ),
+        update_mask=FieldMask(paths=["description", "instructions"]),
+    )
+
+
 def create_knowledge_source_files(
     w: WorkspaceClient,
     assistant_id: str,
@@ -110,6 +138,34 @@ def get_knowledge_source(
     """Fetch a single knowledge source of a KA by its bare id."""
     return w.knowledge_assistants.get_knowledge_source(
         name=f"knowledge-assistants/{assistant_id}/knowledge-sources/{source_id}"
+    )
+
+
+def update_knowledge_source_description(
+    w: WorkspaceClient,
+    source_name: str,
+    display_name: str,
+    source_type: str,
+    description: str,
+) -> KnowledgeSource:
+    """Patch a knowledge source's ``description`` in place (metadata-only).
+
+    ``source_name`` is the full resource name
+    (``knowledge-assistants/{ka_id}/knowledge-sources/{src_id}``). ``display_name``
+    and ``source_type`` are required by the ``KnowledgeSource`` constructor but are
+    NOT in the mask, so they pass through unchanged; only the description is
+    updated — no re-create, no re-index trigger.
+    """
+    from google.protobuf.field_mask_pb2 import FieldMask
+
+    return w.knowledge_assistants.update_knowledge_source(
+        name=source_name,
+        knowledge_source=KnowledgeSource(
+            display_name=display_name,
+            description=description,
+            source_type=source_type,
+        ),
+        update_mask=FieldMask(paths=["description"]),
     )
 
 
