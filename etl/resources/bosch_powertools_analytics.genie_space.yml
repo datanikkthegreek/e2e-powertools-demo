@@ -1,0 +1,8 @@
+resources:
+  genie_spaces:
+    bosch_powertools_analytics:
+      title: "Bosch Power Tools Analytics"
+      warehouse_id: a8384833e450ec4e
+      file_path: ../src/bosch_powertools_analytics.geniespace.json
+      description: 'This Genie space answers questions about a Bosch Power Tools direct-to-consumer webshop demo. It blends three data domains for ~12 Bosch power tools: (1) Catalog & commerce — products, customers, completed purchases and line items. (2) Behavioral funnel — GA4-style product page views and cart actions. (3) Technical specifications — voltage, torque, RPM, weight, battery platform, extracted from real PDF datasheets via AI. All money is in EUR. All timestamps are UTC. This is a small demo dataset (12 products, 14 customers, 11 purchases, 18 purchase lines, 3,012 product views, 830 cart actions, 12 spec rows) — report exact numbers, do not extrapolate. Answer ONLY from the tables in this space (schema techsummit). Never invent products, prices, or customers. signup_date in dim_customer is NULL for every row — never use it for cohort/tenure analysis. If "revenue" is asked without a grain, default to SUM(fact_purchase.total_eur) and offer to break down by product, customer, or country. If "best selling" is ambiguous between units and revenue, ask which or show both.'
+      parent_path: /Workspace/Users/nikolaos.servos@databricks.com

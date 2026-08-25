@@ -4,7 +4,7 @@
 #   gtm_events (raw Delta) -> event_view_item + event_add_to_cart.
 #   Lakebase CDF change-logs (lb_*_history) --AUTO CDC-->
 #     dim_product + dim_customer + fact_purchase + fact_purchase_line.
-#   datasheet PDFs (raw_docs Volume) --IDP-->
+#   datasheet PDFs (datasheets Volume) --IDP-->
 #     _parsed_datasheets -> _extracted_specs -> product_specs.
 # All other silver tables (pageview / abandon / signup) and every gold cart MV +
 # gold_customer_360 have been removed from this pipeline: the demo funnel is

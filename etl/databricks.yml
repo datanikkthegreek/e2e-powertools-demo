@@ -28,9 +28,12 @@ variables:
   lakebase_project:
     description: "Lakebase (Postgres) OLTP project name."
     default: "techsummit"
-  volume:
-    description: "Volume holding the raw datasheet/manual PDFs for IDP + KA."
-    default: "raw_docs"
+  volume_manuals:
+    description: "MANAGED Volume holding the Bosch operating-manual PDFs consumed by the Knowledge Assistant (KA)."
+    default: "productmanuals"
+  volume_datasheets:
+    description: "MANAGED Volume holding the Bosch datasheet PDFs consumed by IDP (silver pipeline)."
+    default: "datasheets"
   warehouse_id:
     description: "SQL warehouse used by the curate (SQL) tasks."
     # FEVM's shared serverless "Serverless Starter Warehouse". The previously

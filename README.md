@@ -21,7 +21,7 @@ Everything lives in one isolated namespace on the FEVM workspace:
 | Catalog | `nikks_fevm_workspace_7405607030687545` |
 | Schema | `techsummit` |
 | Lakebase project | `techsummit` |
-| Volume (PDFs) | `nikks_fevm_workspace_7405607030687545.techsummit.raw_docs` |
+| Volumes (PDFs) | `…techsummit.productmanuals` (KA manuals) · `…techsummit.datasheets` (IDP datasheets) |
 
 ## Two-bundle layout
 
@@ -35,7 +35,7 @@ e2e-powertools-demo/
   etl/                       # BUNDLE 2 — ETL + Lakebase  (DEPLOY FIRST)
     databricks.yml
     resources/
-      lakebase.yml           # Lakebase project 'techsummit' (pg17) + raw_docs Volume + CDF setup notes
+      lakebase.yml           # Lakebase project 'techsummit' (pg17) + productmanuals/datasheets Volumes + CDF setup notes
       pipeline_silver.yml    # gtm_events -> event_*, lb_*_history -> dim/fact (AUTO CDC), PDFs -> product_specs (IDP)
       job_build.yml          # one DAG: seed_gtm -> silver(CDC+IDP) -> key_normalize
     pipelines/silver/transformations/
@@ -89,7 +89,7 @@ review base). Everything below is the trim, on the feature branch:
 
 **Environment repointed to the isolated `techsummit` namespace**
 - Catalog → `nikks_fevm_workspace_7405607030687545`, schema → `techsummit`,
-  Lakebase project → `techsummit`, Volume → `raw_docs`.
+  Lakebase project → `techsummit`, Volumes → `productmanuals` + `datasheets`.
 - App runtime (`app/app.yml`) and backend config defaults (`_config.py`,
   `lakebase.py`) updated; no references to the old `cdp` schema remain in the
   trimmed code paths. (The pipeline config keys were renamed `cdp.table_*` →
