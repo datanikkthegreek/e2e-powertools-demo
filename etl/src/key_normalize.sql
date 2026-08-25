@@ -32,16 +32,16 @@ USE CATALOG IDENTIFIER(:catalog);
 USE SCHEMA IDENTIFIER(:schema);
 
 -- fact_view_item: one row per product-detail-page view.
--- event_view_item carries the GA4 `items` array; explode it to the SKU.
+-- event_view_item now exposes a scalar product_id (items[0].item_id) directly,
+-- so there is no array to explode.
 CREATE OR REPLACE TABLE fact_view_item AS
 SELECT
   v.ingest_timestamp                       AS event_ts,
   CAST(v.user_id AS STRING)                AS user_id,
-  lower(CAST(item.item_id AS STRING))      AS product_id,
+  lower(CAST(v.product_id AS STRING))      AS product_id,
   v.ga_session_id                          AS session_id
 FROM event_view_item v
-LATERAL VIEW explode(v.items) t AS item
-WHERE item.item_id IS NOT NULL;
+WHERE v.product_id IS NOT NULL;
 
 -- fact_add_to_cart: one row per add-to-cart action.
 CREATE OR REPLACE TABLE fact_add_to_cart AS
@@ -49,8 +49,8 @@ SELECT
   a.source_timestamp                       AS event_ts,
   CAST(a.user_id AS STRING)                AS user_id,
   CAST(a.cart_id AS STRING)                AS cart_id,
-  lower(CAST(a.item_id AS STRING))         AS product_id,
+  lower(CAST(a.product_id AS STRING))      AS product_id,
   a.quantity_delta                         AS quantity_delta,
   a.cart_action                            AS cart_action
 FROM event_add_to_cart a
-WHERE a.item_id IS NOT NULL;
+WHERE a.product_id IS NOT NULL;

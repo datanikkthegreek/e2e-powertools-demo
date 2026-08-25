@@ -59,7 +59,7 @@ resources:
         - file:
             path: ../pipelines/silver/transformations/idp_extracted_specs.sql
         - file:
-            path: ../pipelines/silver/transformations/product_specs.sql
+            path: ../pipelines/silver/transformations/idp_product_specs.sql
 
 # The silver pipeline is run as the `run_silver_pipeline` task inside the
 # powertools-build orchestration job (../resources/job_build.yml), so the
