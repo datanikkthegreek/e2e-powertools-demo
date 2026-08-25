@@ -20,9 +20,14 @@ SELECT
 FROM STREAM(lb_purchases_history)
 WHERE _pg_change_type IN ('insert', 'update_postimage', 'delete');
 
-CREATE OR REFRESH STREAMING TABLE fact_purchase
-  COMMENT 'Current-state purchases (the money fact). Collapsed from lb_purchases_history via native AUTO CDC.'
-  TBLPROPERTIES ('quality' = 'silver');
+CREATE OR REFRESH STREAMING TABLE fact_purchase (
+  purchase_id STRING    COMMENT 'Canonical UUID primary key identifying the purchase transaction. Derived from the binary Lakebase purchase id.',
+  customer_id STRING    COMMENT 'Canonical UUID of the customer who made the purchase. Foreign key to dim_customer.customer_id.',
+  cart_id     STRING    COMMENT 'Canonical UUID of the shopping cart associated with this purchase. Links to event_add_to_cart.cart_id for funnel analysis.',
+  created_at  TIMESTAMP COMMENT 'Timestamp when the purchase was created/completed in the source system (UTC).',
+  total_eur   DOUBLE    COMMENT 'Total purchase amount in euros (EUR). Sum of all line items in this transaction.'
+)
+  COMMENT 'Purchase fact table (SCD Type 1 — current state only). One row per completed purchase transaction, continuously updated from the Lakebase purchases database via CDC. Grain: one purchase = one customer checkout event. Join to dim_customer on customer_id for customer attributes, and to fact_purchase_line on purchase_id for line-item detail.';
 
 CREATE FLOW fact_purchase_cdc AS AUTO CDC INTO fact_purchase
 FROM STREAM(_purchases_changes)

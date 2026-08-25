@@ -35,9 +35,15 @@ SELECT
 FROM STREAM(lb_purchase_lines_history)
 WHERE _pg_change_type IN ('insert', 'update_postimage', 'delete');
 
-CREATE OR REFRESH STREAMING TABLE fact_purchase_line
-  COMMENT 'Current-state purchase lines. Collapsed from lb_purchase_lines_history via native AUTO CDC, keyed on the line id (purchase_line_id).'
-  TBLPROPERTIES ('quality' = 'silver');
+CREATE OR REFRESH STREAMING TABLE fact_purchase_line (
+  purchase_line_id STRING COMMENT 'Canonical UUID primary key identifying this individual line item. Derived from the binary Lakebase purchase_lines id.',
+  purchase_id      STRING COMMENT 'Canonical UUID of the parent purchase transaction. Foreign key to fact_purchase.purchase_id.',
+  product_id       STRING COMMENT 'Canonical UUID of the product purchased on this line. Foreign key to dim_product.product_id.',
+  quantity         INT    COMMENT 'Number of units of this product purchased on this line item.',
+  unit_price_eur   DOUBLE COMMENT 'Price per unit in euros (EUR) at the time of purchase. May differ from dim_product.price_eur if price has changed since.',
+  name_snapshot    STRING COMMENT 'Product name captured at time of purchase. Snapshot preserves the name even if dim_product.name changes later.'
+)
+  COMMENT 'Purchase line-item fact table (SCD Type 1 — current state only). One row per product line within a purchase, continuously updated via CDC. Grain: one row = one product in one purchase. Join to fact_purchase on purchase_id for transaction totals and timestamps, and to dim_product on product_id for current product attributes.';
 
 CREATE FLOW fact_purchase_line_cdc AS AUTO CDC INTO fact_purchase_line
 FROM STREAM(_purchase_lines_changes)

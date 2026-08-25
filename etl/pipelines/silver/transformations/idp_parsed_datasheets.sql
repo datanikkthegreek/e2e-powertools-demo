@@ -12,9 +12,12 @@
 -- matching the event tables. Mirrors the reference product-manuals pipeline
 -- (github.com/datanikkthegreek/databricks_data_extraction) parse -> extract ->
 -- explode chain as streaming tables.
-CREATE OR REFRESH STREAMING TABLE _parsed_datasheets
-  COMMENT 'Parsed Bosch datasheet PDFs (VARIANT). One row per PDF file on the raw_docs Volume.'
-  TBLPROPERTIES ('quality' = 'silver')
+CREATE OR REFRESH STREAMING TABLE _parsed_datasheets (
+  path      STRING  COMMENT 'Full Volume file path of the source PDF datasheet (e.g. /Volumes/.../datasheets/GSR_18V-55.pdf). Unique identifier for lineage tracing back to the raw document.',
+  file_name STRING  COMMENT 'File name of the source PDF (e.g. GSR_18V-55.pdf). Human-readable identifier for the datasheet.',
+  parsed    VARIANT COMMENT 'Structured VARIANT output from ai_parse_document. Contains the full parsed document content (text, layout, tables) ready for downstream ai_extract processing.'
+)
+  COMMENT 'Parsed Bosch power tool datasheet PDFs. One row per PDF file ingested from the raw_docs Volume. Intermediate IDP stage: raw binary PDF -> structured VARIANT via ai_parse_document. Consumed by _extracted_specs for AI-based specification extraction. Internal table (prefixed with underscore).'
 AS
 SELECT
   _metadata.file_path                        AS path,

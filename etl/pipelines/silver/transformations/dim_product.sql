@@ -43,9 +43,13 @@ SELECT
 FROM STREAM(lb_products_history)
 WHERE _pg_change_type IN ('insert', 'update_postimage', 'delete');
 
-CREATE OR REFRESH STREAMING TABLE dim_product
-  COMMENT 'Current-state products (specs live in product_specs, not here). Collapsed from lb_products_history via native AUTO CDC.'
-  TBLPROPERTIES ('quality' = 'silver');
+CREATE OR REFRESH STREAMING TABLE dim_product (
+  product_id STRING COMMENT 'Canonical UUID primary key identifying the product. Derived from the binary Lakebase product id. Join key to fact_purchase_line.product_id and event_view_item/event_add_to_cart item_id.',
+  name       STRING COMMENT 'Product display name (e.g. GSR 18V-55, GBH 2-26 DRE). The human-readable product title from the catalog.',
+  category   STRING COMMENT 'Product category or family description (e.g. Cordless Drill/Driver, Rotary Hammer). Sourced from the description field in Lakebase.',
+  price_eur  DOUBLE COMMENT 'Current retail price in euros (EUR). Updated via CDC when the source price changes.'
+)
+  COMMENT 'Product dimension table (SCD Type 1 — current state only). One row per unique product in the Bosch power tools catalog, continuously updated from the Lakebase products database via CDC. Technical specifications (voltage, torque, weight) live in idp_product_specs (joinable on name = model_name). Join on product_id to fact_purchase_line or event tables for sales and behavioral analysis.';
 
 CREATE FLOW dim_product_cdc AS AUTO CDC INTO dim_product
 FROM STREAM(_products_changes)
