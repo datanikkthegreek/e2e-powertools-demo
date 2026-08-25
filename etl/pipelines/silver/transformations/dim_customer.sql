@@ -20,10 +20,11 @@ FROM STREAM(lb_accounts_history)
 WHERE _pg_change_type IN ('insert', 'update_postimage', 'delete');
 
 CREATE OR REFRESH STREAMING TABLE dim_customer (
-  customer_id STRING COMMENT 'Canonical UUID primary key identifying the customer account. Derived from the binary Lakebase account id. Join key to fact_purchase.customer_id.',
+  customer_id STRING NOT NULL COMMENT 'Canonical UUID primary key identifying the customer account. Derived from the binary Lakebase account id. Join key to fact_purchase.customer_id.',
   city        STRING COMMENT 'City where the customer is located, as recorded in the source account system.',
   country     STRING COMMENT 'Country where the customer is located (full country name, e.g. Germany, France).',
-  signup_date DATE   COMMENT 'Date the customer first signed up. Currently NULL for all rows — the source system does not track signup timestamps.'
+  signup_date DATE   COMMENT 'Date the customer first signed up. Currently NULL for all rows — the source system does not track signup timestamps.',
+  CONSTRAINT pk_dim_customer PRIMARY KEY (customer_id)
 )
   COMMENT 'Customer dimension table (SCD Type 1 — current state only). One row per unique customer account, continuously updated from the Lakebase accounts database via CDC. Use customer_id to join to fact_purchase and fact_purchase_line for purchase analysis.';
 

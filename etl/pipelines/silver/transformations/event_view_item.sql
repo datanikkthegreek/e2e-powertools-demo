@@ -9,7 +9,8 @@ CREATE OR REFRESH STREAMING TABLE event_view_item (
   ingest_timestamp TIMESTAMP                                                                                           COMMENT 'Timestamp when the event was ingested into the data platform (UTC). Derived from the raw ingestion_time epoch.',
   user_id          STRING                                                                                              COMMENT 'Unique identifier for the user who viewed the product. Ties behavioral events to dim_customer via downstream key normalization.',
   ga_session_id    STRING                                                                                              COMMENT 'Google Analytics session identifier. Groups page views within a single browsing session for sessionization analysis.',
-  product_id       STRING    COMMENT 'Canonical product identifier viewed on the page. Foreign key to dim_product.product_id. Extracted from the GA4 items array (always contains exactly one item per view_item event).'
+  product_id       STRING    COMMENT 'Canonical product identifier viewed on the page. Foreign key to dim_product.product_id. Extracted from the GA4 items array (always contains exactly one item per view_item event).',
+  CONSTRAINT fk_event_view_item_product FOREIGN KEY (product_id) REFERENCES dim_product(product_id)
 )
   COMMENT 'GA4 product detail page view event stream. One row per product page view action by a user. Grain: one user + one product view event. Use to analyze product discovery, browsing patterns, and top-of-funnel engagement. Join to dim_product on product_id for product attributes.'
 AS

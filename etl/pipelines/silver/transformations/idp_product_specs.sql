@@ -15,14 +15,15 @@
 -- removed, so IDP no longer depends on the curate chain. Bare names resolve in
 -- the pipeline's configured catalog/schema (see etl/resources/pipeline_silver.yml).
 CREATE OR REFRESH STREAMING TABLE idp_product_specs (
-  source_path       STRING COMMENT 'Full Volume file path of the PDF datasheet this spec was extracted from. Part of the natural key (source_path + model_name).',
+  source_path       STRING NOT NULL COMMENT 'Full Volume file path of the PDF datasheet this spec was extracted from. Primary key identifying the source document.',
   model_name        STRING COMMENT 'Bosch model designation as stated in the datasheet (e.g. GSR 18V-55, GBH 2-26 DRE). Part of the natural key.',
   voltage_v         DOUBLE COMMENT 'Rated/nominal voltage in volts (V). Indicates battery platform voltage or mains voltage for corded tools.',
   max_torque_nm     DOUBLE COMMENT 'Maximum torque output in Newton-meters (Nm). Key performance indicator for drills and impact drivers.',
   no_load_rpm       INT    COMMENT 'Maximum no-load rotational speed in revolutions per minute (RPM).',
   chuck_capacity_mm DOUBLE COMMENT 'Maximum chuck or collet capacity in millimeters (mm). Determines the largest drill bit diameter the tool accepts.',
   weight_kg         DOUBLE COMMENT 'Tool weight in kilograms (kg) without battery. Relevant for ergonomics and portability comparisons.',
-  battery_platform  STRING COMMENT 'Battery platform family (e.g. 18V, 12V) or corded for mains-powered tools. Determines battery interoperability across the Bosch lineup.'
+  battery_platform  STRING COMMENT 'Battery platform family (e.g. 18V, 12V) or corded for mains-powered tools. Determines battery interoperability across the Bosch lineup.',
+  CONSTRAINT pk_idp_product_specs PRIMARY KEY (source_path)
 )
   COMMENT 'Bosch power tool technical specifications extracted from PDF datasheets via AI (IDP pipeline). One row per tool model per datasheet. Grain: source_path + model_name. Use for product comparisons, filtering by technical attributes, and enriching product analytics. Can be joined to dim_product on model_name = dim_product.name for combining catalog data with technical specs.'
 AS
