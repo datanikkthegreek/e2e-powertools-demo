@@ -41,8 +41,11 @@
         "description": [
           "Technical specs from PDF datasheets (12 rows). Columns: model_name, voltage_v, max_torque_nm, no_load_rpm, chuck_capacity_mm, weight_kg, battery_platform."
         ],
-        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.product_specs"
+        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.idp_product_specs"
       }
+    ],
+    "volumes": [
+      { "path": "/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/productmanuals/" }
     ]
   },
   "instructions": {
@@ -80,7 +83,7 @@
           "Which 18V tool has the highest torque, and how well is it selling?"
         ],
         "sql": [
-          "SELECT p.name, s.max_torque_nm, s.battery_platform, COALESCE(SUM(l.quantity), 0) AS units_sold FROM nikks_fevm_workspace_7405607030687545.techsummit.product_specs s JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_product p ON s.model_name = p.name LEFT JOIN nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line l ON l.product_id = p.product_id WHERE s.battery_platform = '18V' GROUP BY p.name, s.max_torque_nm, s.battery_platform ORDER BY s.max_torque_nm DESC;"
+          "SELECT p.name, s.max_torque_nm, s.battery_platform, COALESCE(SUM(l.quantity), 0) AS units_sold FROM nikks_fevm_workspace_7405607030687545.techsummit.idp_product_specs s JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_product p ON s.model_name = p.name LEFT JOIN nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line l ON l.product_id = p.product_id WHERE s.battery_platform = '18V' GROUP BY p.name, s.max_torque_nm, s.battery_platform ORDER BY s.max_torque_nm DESC;"
         ]
       },
       {
@@ -96,17 +99,17 @@
     "join_specs": [
       {
         "comment": [
-          "product_specs to dim_product via model_name"
+          "idp_product_specs to dim_product via model_name"
         ],
         "id": "01f1a09ac690110b92425a5fd23034d1",
         "left": {
-          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.product_specs"
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.idp_product_specs"
         },
         "right": {
           "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.dim_product"
         },
         "sql": [
-          "product_specs.model_name = dim_product.name",
+          "idp_product_specs.model_name = dim_product.name",
           "--rt=FROM_RELATIONSHIP_TYPE_ONE_TO_ONE--"
         ]
       },
