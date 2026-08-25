@@ -18,8 +18,7 @@ CREATE OR REFRESH STREAMING TABLE event_add_to_cart (
   quantity_delta     INT       COMMENT 'Change in quantity (new_quantity minus previous_quantity). Positive = items added, negative = items removed.',
   cart_action        STRING    COMMENT 'Type of cart modification: add (new item), increase (more units), decrease (fewer units), or remove (item dropped).',
   currency           STRING    COMMENT 'ISO 4217 currency code for the price (e.g. EUR).',
-  CONSTRAINT fk_event_add_to_cart_product FOREIGN KEY (product_id) REFERENCES dim_product(product_id),
-  CONSTRAINT fk_event_add_to_cart_purchase FOREIGN KEY (cart_id) REFERENCES fact_purchase(cart_id)
+  CONSTRAINT fk_event_add_to_cart_product FOREIGN KEY (product_id) REFERENCES dim_product(product_id)
 )
   COMMENT 'GA4 add-to-cart event stream. One row per cart modification action (add, increase, decrease, or remove an item). Grain: one user + one item + one cart action timestamp. Use to analyze cart behavior, conversion funnels, and abandonment patterns. Joins downstream to fact_purchase via cart_id for purchase attribution.'
 AS
