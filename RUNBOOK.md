@@ -10,8 +10,8 @@ one produced. Run it in exactly this order:
 
 1. **Deploy the ETL bundle.** `cd etl && databricks bundle deploy -p FEVM` —
    provisions the `techsummit` Lakebase project (**pg17**, required by CDF), the
-   `techsummit` UC schema, the `raw_docs` Volume, the silver pipeline, and the
-   `powertools-build` job.
+   `techsummit` UC schema, the two PDF Volumes (`productmanuals` for the KA and
+   `datasheets` for IDP), the silver pipeline, and the `powertools-build` job.
 2. **Seed the OLTP.** `python etl/src/seed_lakebase_oltp.py --profile FEVM
    --project techsummit`. Creates products/accounts/carts/cart_items/purchases/
    purchase_lines with deterministic UUIDs and sets `REPLICA IDENTITY FULL` on
@@ -32,9 +32,11 @@ one produced. Run it in exactly this order:
      `lb_purchase_lines_history` have rows. *(b) — must precede step 5: both the
      GTM seed and the silver pipeline's AUTO CDC flows read the `lb_*_history`
      tables.*
-4. **Upload PDFs.** Real Bosch **datasheet** PDFs to
-   `…techsummit.raw_docs/datasheets` (the IDP streaming tables in the silver
-   pipeline read them). Manuals are a Phase-2 concern.
+4. **Upload PDFs.** Run `scripts/upload_pdfs.sh` (FEVM defaults) to stage both
+   PDF sets into their MANAGED Volumes: `etl/data/datasheets/*.pdf` →
+   `…techsummit.datasheets` (read by the IDP streaming tables) and
+   `etl/data/manuals/*.pdf` → `…techsummit.productmanuals` (the KA source). The
+   script is idempotent (`databricks fs cp --overwrite`, kebab filenames kept).
 5. **Run `powertools-build`.** One job, one enforced DAG:
    `wait_for_cdc` (gate) → `seed_gtm_events` (c) → `run_silver_pipeline` (d) →
    `key_normalize` (e).
@@ -100,20 +102,23 @@ own chunking/embedding/retrieval over the PDFs.
 > kit variant of that base tool). A few (`gsr-18v-55`, `pws-700-115`,
 > `psr-1080-li`, `psb-1800-li-2`) are browser-sourced (device.report /
 > discontinued catalogs). To re-stage or add a manual, drop the PDF into the
-> Volume folder directly (`databricks fs cp <file>.pdf
-> dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals/<tool-id>.pdf -p $PROFILE`),
-> then re-run the KA notebook to re-sync. There is no downloader script.
+> Volume root directly (`databricks fs cp <file>.pdf
+> dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME_MANUALS/<tool-id>.pdf -p $PROFILE`), or
+> just re-run `scripts/upload_pdfs.sh`, then re-run the KA notebook to re-sync.
 
-The manuals live in a **new `manuals/` subfolder** of the existing `raw_docs`
-Volume — separate from the `datasheets/` folder that IDP reads:
-`/Volumes/${var.catalog}/${var.schema}/${var.volume}/manuals/`
+The manuals live in their **own MANAGED Volume `productmanuals`** — completely
+separate from the `datasheets` Volume that IDP reads (the old single `raw_docs`
+Volume with `manuals/` + `datasheets/` subfolders was split in two). Manuals sit
+at the Volume **root**, no subfolder:
+`/Volumes/${var.catalog}/${var.schema}/${var.volume_manuals}/`
 (resolves to
-`/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/raw_docs/manuals/`
+`/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/productmanuals/`
 on the current FEVM target).
 
-> The `${var.catalog}/${var.schema}/${var.volume}` above is the **DAB-variable
-> reference** (see `etl/databricks.yml`), not shell syntax. The runnable commands
-> below use plain shell `$CATALOG/$SCHEMA/$VOLUME/$PROFILE` so they paste-and-run.
+> The `${var.catalog}/${var.schema}/${var.volume_manuals}` above is the
+> **DAB-variable reference** (see `etl/databricks.yml`), not shell syntax. The
+> runnable commands below use plain shell `$CATALOG/$SCHEMA/$VOLUME_MANUALS/$PROFILE`
+> so they paste-and-run.
 
 ### Prerequisites
 
@@ -127,25 +132,29 @@ uv pip install -r etl/requirements.txt   # or: pip install -r etl/requirements.t
 Set your target once (FEVM defaults shown); the verify command below uses these:
 
 ```bash
-export CATALOG=nikks_fevm_workspace_7405607030687545 SCHEMA=techsummit VOLUME=raw_docs PROFILE=FEVM
+export CATALOG=nikks_fevm_workspace_7405607030687545 SCHEMA=techsummit \
+  VOLUME_MANUALS=productmanuals VOLUME_DATASHEETS=datasheets PROFILE=FEVM
 ```
 
 ### 1. Manuals in the Volume (already staged)
 
-The 12 real Bosch manual PDFs are already uploaded to the `manuals/` subfolder
-(see the "Real manuals only" note above) — there is no downloader script. Verify
-they are present (and the sibling `datasheets/` folder is untouched):
+The 12 real Bosch manual PDFs live in the `productmanuals` Volume (staged by
+`scripts/upload_pdfs.sh` from `etl/data/manuals/`). Verify they are present (and
+the sibling `datasheets` Volume that IDP reads is separately populated):
 
 ```bash
-databricks fs ls dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals -p $PROFILE
+databricks fs ls dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME_MANUALS -p $PROFILE
+databricks fs ls dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME_DATASHEETS -p $PROFILE
 ```
 
-To re-stage or add a manual, copy the PDF into the folder directly, then re-run
+To re-stage everything, just re-run the upload script (idempotent), then re-run
 the KA notebook (step 2) to re-sync:
 
 ```bash
+scripts/upload_pdfs.sh                    # FEVM defaults, both Volumes
+# or a single manual:
 databricks fs cp <file>.pdf \
-  dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME/manuals/<tool-id>.pdf -p $PROFILE
+  dbfs:/Volumes/$CATALOG/$SCHEMA/$VOLUME_MANUALS/<tool-id>.pdf --overwrite -p $PROFILE
 ```
 
 ### 2. Create-or-update the KA (Databricks SDK notebook)
@@ -160,7 +169,7 @@ looks the KA up by display name and **REUSES** it (re-syncs its knowledge source
 when it already exists — it never re-creates or deletes. The notebook cells are:
 
 1. **Config** — `WorkspaceClient()`, the `techsummit`-only target guardrail, the
-   Volume path (`/Volumes/…/manuals/`), and the KA display name / description /
+   Volume path (`/Volumes/…/productmanuals/`), and the KA display name / description /
    instructions + knowledge-source display name / description.
 2. **Create-or-update + sync** — if no KA named `powertools-manuals-ka` exists it
    creates one and attaches the `manuals/` Volume folder as a `files` knowledge
@@ -196,7 +205,7 @@ If you would rather not run the notebook, build it in the UI instead:
    maintenance, troubleshooting, warranty)._
 4. **Add knowledge source** → **Files in a Unity Catalog Volume**.
 5. **Volume path** (paste exactly):
-   `/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/raw_docs/manuals/`
+   `/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/productmanuals/`
 6. **Source description** (paste): _Bosch power-tool operating manuals (PDFs) —
    safety, specs, operation, battery/mains, maintenance, troubleshooting,
    warranty._

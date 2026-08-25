@@ -1,0 +1,302 @@
+{
+  "data_sources": {
+    "tables": [
+      {
+        "description": [
+          "One row per customer account (14 rows). PK customer_id. Columns: customer_id, city, country (full name), signup_date (ALL NULL — never use for cohort/tenure analysis)."
+        ],
+        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.dim_customer"
+      },
+      {
+        "description": [
+          "One row per product in the Bosch catalog (12 rows). PK product_id. Columns: product_id (canonical UUID), name (e.g. \"GSR 18V-55\"), category (family), price_eur (current list price)."
+        ],
+        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.dim_product"
+      },
+      {
+        "description": [
+          "GA4 cart actions (830 rows). Columns: source_timestamp (UTC), user_id, cart_id, product_id (FK->dim_product), item_name, price, previous_quantity, new_quantity, quantity_delta, cart_action ('add'|'increase'|'decrease'|'remove'), currency."
+        ],
+        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.event_add_to_cart"
+      },
+      {
+        "description": [
+          "GA4 product-detail-page views (3,012 rows). Columns: ingest_timestamp (UTC), user_id, ga_session_id, product_id (FK->dim_product)."
+        ],
+        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.event_view_item"
+      },
+      {
+        "description": [
+          "One row per completed checkout (11 rows). PK purchase_id, UNIQUE cart_id. Columns: purchase_id, customer_id (FK->dim_customer), cart_id (UNIQUE; the checkout cart identifier \u2014 cart<->purchase is a LOGICAL non-enforced join to event_add_to_cart.cart_id, NOT a declared FK), created_at (UTC), total_eur."
+        ],
+        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase"
+      },
+      {
+        "description": [
+          "One row per product line within a purchase (18 rows). PK purchase_line_id. Columns: purchase_line_id, purchase_id (FK->fact_purchase), product_id (FK->dim_product), quantity, unit_price_eur, name_snapshot."
+        ],
+        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line"
+      },
+      {
+        "description": [
+          "Technical specs from PDF datasheets (12 rows). Columns: model_name, voltage_v, max_torque_nm, no_load_rpm, chuck_capacity_mm, weight_kg, battery_platform."
+        ],
+        "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.product_specs"
+      }
+    ]
+  },
+  "instructions": {
+    "example_question_sqls": [
+      {
+        "id": "01f1a09ad35712cbbed63ce0e141d92c",
+        "question": [
+          "Top 5 products by revenue"
+        ],
+        "sql": [
+          "SELECT p.name, SUM(l.quantity * l.unit_price_eur) AS revenue_eur FROM nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line l JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_product p ON l.product_id = p.product_id GROUP BY p.name ORDER BY revenue_eur DESC LIMIT 5;"
+        ]
+      },
+      {
+        "id": "01f1a09ad35717c997507c6f0ceef585",
+        "question": [
+          "Which products are viewed a lot but rarely purchased?"
+        ],
+        "sql": [
+          "SELECT p.name, COUNT(DISTINCT v.ga_session_id) AS views, COALESCE(SUM(l.quantity), 0) AS units_sold FROM nikks_fevm_workspace_7405607030687545.techsummit.dim_product p LEFT JOIN nikks_fevm_workspace_7405607030687545.techsummit.event_view_item v ON v.product_id = p.product_id LEFT JOIN nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line l ON l.product_id = p.product_id GROUP BY p.name ORDER BY views DESC;"
+        ]
+      },
+      {
+        "id": "01f1a09ad3571c12a05c70ef964f66bd",
+        "question": [
+          "Show abandoned carts"
+        ],
+        "sql": [
+          "SELECT a.cart_id, a.user_id, COUNT(*) AS cart_actions FROM nikks_fevm_workspace_7405607030687545.techsummit.event_add_to_cart a LEFT JOIN nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase fp ON fp.cart_id = a.cart_id WHERE fp.purchase_id IS NULL GROUP BY a.cart_id, a.user_id ORDER BY cart_actions DESC;"
+        ]
+      },
+      {
+        "id": "01f1a09ad3571fad8f3be41912af44d7",
+        "question": [
+          "Which 18V tool has the highest torque, and how well is it selling?"
+        ],
+        "sql": [
+          "SELECT p.name, s.max_torque_nm, s.battery_platform, COALESCE(SUM(l.quantity), 0) AS units_sold FROM nikks_fevm_workspace_7405607030687545.techsummit.product_specs s JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_product p ON s.model_name = p.name LEFT JOIN nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line l ON l.product_id = p.product_id WHERE s.battery_platform = '18V' GROUP BY p.name, s.max_torque_nm, s.battery_platform ORDER BY s.max_torque_nm DESC;"
+        ]
+      },
+      {
+        "id": "01f1a09ad359110f892cc0e86a0165d8",
+        "question": [
+          "Revenue by country"
+        ],
+        "sql": [
+          "SELECT c.country, SUM(fp.total_eur) AS revenue_eur, COUNT(*) AS purchases FROM nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase fp JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_customer c ON fp.customer_id = c.customer_id GROUP BY c.country ORDER BY revenue_eur DESC;"
+        ]
+      }
+    ],
+    "join_specs": [
+      {
+        "comment": [
+          "product_specs to dim_product via model_name"
+        ],
+        "id": "01f1a09ac690110b92425a5fd23034d1",
+        "left": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.product_specs"
+        },
+        "right": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.dim_product"
+        },
+        "sql": [
+          "product_specs.model_name = dim_product.name",
+          "--rt=FROM_RELATIONSHIP_TYPE_ONE_TO_ONE--"
+        ]
+      },
+      {
+        "comment": [
+          "fact_purchase_line to dim_product via product_id"
+        ],
+        "id": "01f1a09ac69015c7bd9ce6f3edca47f3",
+        "left": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line"
+        },
+        "right": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.dim_product"
+        },
+        "sql": [
+          "fact_purchase_line.product_id = dim_product.product_id",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "comment": [
+          "fact_purchase_line to fact_purchase via purchase_id"
+        ],
+        "id": "01f1a09ac69019b5a076170e2c176593",
+        "left": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line"
+        },
+        "right": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase"
+        },
+        "sql": [
+          "fact_purchase_line.purchase_id = fact_purchase.purchase_id",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "comment": [
+          "fact_purchase to dim_customer via customer_id"
+        ],
+        "id": "01f1a09ac6901dd0be29d9795f93582c",
+        "left": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase"
+        },
+        "right": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.dim_customer"
+        },
+        "sql": [
+          "fact_purchase.customer_id = dim_customer.customer_id",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "comment": [
+          "event_view_item to dim_product via product_id"
+        ],
+        "id": "01f1a09ac691118e88ddc8adcac6f85c",
+        "left": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.event_view_item"
+        },
+        "right": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.dim_product"
+        },
+        "sql": [
+          "event_view_item.product_id = dim_product.product_id",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "comment": [
+          "event_add_to_cart to dim_product via product_id"
+        ],
+        "id": "01f1a09ac691159ea3258b8f21a46bfa",
+        "left": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.event_add_to_cart"
+        },
+        "right": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.dim_product"
+        },
+        "sql": [
+          "event_add_to_cart.product_id = dim_product.product_id",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "comment": [
+          "event_add_to_cart to fact_purchase via cart_id"
+        ],
+        "id": "01f1a09ac691197c819da1fe74856536",
+        "left": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.event_add_to_cart"
+        },
+        "right": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase"
+        },
+        "sql": [
+          "event_add_to_cart.cart_id = fact_purchase.cart_id",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      },
+      {
+        "comment": [
+          "event_view_item to event_add_to_cart via user_id"
+        ],
+        "id": "01f1a09ac6911d538b1ea8193486dcfe",
+        "left": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.event_view_item"
+        },
+        "right": {
+          "identifier": "nikks_fevm_workspace_7405607030687545.techsummit.event_add_to_cart"
+        },
+        "sql": [
+          "event_view_item.user_id = event_add_to_cart.user_id",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_MANY--"
+        ]
+      }
+    ],
+    "sql_snippets": {
+      "filters": [
+        {
+          "display_name": "Carts added (add or increase actions only)",
+          "id": "01f1a09ac6a1149d9e1cd3eb11b38232",
+          "sql": [
+            "event_add_to_cart.cart_action IN ('add', 'increase')"
+          ]
+        },
+        {
+          "display_name": "Abandoned cart (cart_id with no matching purchase)",
+          "id": "01f1a09ac6a119a28dab1ab21dcfac2a",
+          "sql": [
+            "event_add_to_cart.cart_id NOT IN (SELECT fact_purchase.cart_id FROM fact_purchase)"
+          ]
+        }
+      ],
+      "measures": [
+        {
+          "display_name": "Revenue",
+          "id": "01f1a09ac69f1d0aa2f7b8300096860f",
+          "sql": [
+            "SUM(fact_purchase.total_eur)"
+          ]
+        },
+        {
+          "display_name": "Product revenue",
+          "id": "01f1a09ac6a016d2919cefb59f8acaf1",
+          "sql": [
+            "SUM(fact_purchase_line.quantity * fact_purchase_line.unit_price_eur)"
+          ]
+        },
+        {
+          "display_name": "Units sold",
+          "id": "01f1a09ac6a01a8d8e6b0300220f70b7",
+          "sql": [
+            "SUM(fact_purchase_line.quantity)"
+          ]
+        },
+        {
+          "display_name": "Product views",
+          "id": "01f1a09ac6a1104483942c4e5e99828b",
+          "sql": [
+            "COUNT(*)"
+          ]
+        }
+      ]
+    },
+    "text_instructions": [
+      {
+        "content": [
+          "### Response & Formatting Rules\n",
+          "- Always state currency (EUR) and that figures come from the techsummit demo dataset.\n",
+          "- Report exact numbers from the dataset — do not extrapolate to \"the market.\"\n",
+          "- For funnel questions, be explicit about the stage measured (view / cart / purchase).\n",
+          "\n",
+          "### Disambiguation Rules\n",
+          "- If \"revenue\" is asked without a grain, default to SUM(fact_purchase.total_eur) and offer to break down by product, customer, or country.\n",
+          "- If \"best selling\" is ambiguous between units and revenue, ask which metric the user means, or show both.\n",
+          "- If a request implies customer tenure or signup timing, note that signup_date is unavailable (all NULL) rather than guessing.\n",
+          "\n",
+          "### Price Comparison\n",
+          "- When comparing \"list vs paid\" price, use dim_product.price_eur (current list) vs fact_purchase_line.unit_price_eur (price actually paid). Discount = list - paid.\n",
+          "\n",
+          "### Scope Guardrails\n",
+          "- Answer ONLY from the tables in this space (schema techsummit). Never invent products, prices, customers, or specs.\n",
+          "- If a question needs data not in these tables, say so clearly.\n",
+          "\n",
+          "### High-intent lead definition\n",
+          "A high-intent lead is a user/product combination that was viewed (event_view_item) and/or added to cart (event_add_to_cart) but never purchased (no matching row in fact_purchase_line for that product_id by that user)."
+        ],
+        "id": "01f1a09ad3b81536bae6cd907e686cf1"
+      }
+    ]
+  },
+  "version": 2
+}

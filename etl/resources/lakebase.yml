@@ -13,7 +13,7 @@
 resources:
   # The Unity Catalog schema that owns every table/volume this bundle creates.
   # Declared here so `bundle deploy` provisions it (and orders it before the
-  # raw_docs Volume, which cannot be created without its parent schema). All
+  # PDF Volumes below, which cannot be created without their parent schema). All
   # downstream SQL/curate tasks write into ${var.catalog}.${var.schema}.
   schemas:
     techsummit_schema:
@@ -58,14 +58,24 @@ resources:
 # needs a provisioned instance) was removed — it was the wrong direction AND the
 # wrong instance type for autoscaling Lakebase. See ../../RUNBOOK.md.
 
-  # A Volume for the raw datasheet/manual PDFs consumed by IDP + the Knowledge
-  # Assistant: nikks_fevm_workspace_7405607030687545.techsummit.raw_docs
+  # Two purpose-split MANAGED Volumes for the raw PDFs, replacing the old single
+  # `raw_docs` Volume (which had manuals/ + datasheets/ subfolders, now removed):
+  #   ${var.volume_manuals}    (productmanuals) -> Knowledge Assistant RAG source
+  #   ${var.volume_datasheets} (datasheets)     -> IDP (silver pipeline) source
+  # Each holds its PDFs at the Volume ROOT (no subfolder). Kept separate so the KA
+  # is grounded ONLY on manuals and never sees the datasheets. Both reference the
+  # schema resource (not the raw var) so DAB provisions the techsummit schema
+  # before the Volumes.
   volumes:
-    raw_docs:
+    productmanuals:
       catalog_name: ${var.catalog}
-      # Reference the schema resource (not the raw var) so DAB provisions the
-      # techsummit schema before this Volume.
       schema_name: ${resources.schemas.techsummit_schema.name}
-      name: ${var.volume}
+      name: ${var.volume_manuals}
       volume_type: MANAGED
-      comment: "Raw Bosch datasheet + manual PDFs (IDP source + Knowledge Assistant source)."
+      comment: "Bosch power-tool operating manual PDFs (Knowledge Assistant RAG source)."
+    datasheets:
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.techsummit_schema.name}
+      name: ${var.volume_datasheets}
+      volume_type: MANAGED
+      comment: "Bosch power-tool datasheet PDFs (IDP / silver-pipeline source)."

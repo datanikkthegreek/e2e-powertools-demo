@@ -28,13 +28,16 @@ resources:
   jobs:
     powertools_build:
       name: "powertools-build"
+      # No `volume` job parameter: none of these tasks touch the PDF Volumes
+      # (they gate on CDC, seed GTM, run the silver pipeline, key-normalize).
+      # The raw-doc Volumes were split into productmanuals + datasheets; the
+      # only file-reading consumer is the IDP transformation, which carries its
+      # own literal Volume path (see idp_parsed_datasheets.sql).
       parameters:
         - name: catalog
           default: ${var.catalog}
         - name: schema
           default: ${var.schema}
-        - name: volume
-          default: ${var.volume}
       tasks:
         # (b-gate) CDC readiness gate. The Lakebase CDF feed (b) is enabled
         #     outside this job, so this first task POLLS until all four
