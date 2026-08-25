@@ -41,6 +41,8 @@ resources:
       schema: ${var.schema}
       serverless: true
       channel: "PREVIEW"
+      configuration:
+        spark.databricks.sql.dsv2.unique.enabled: "true"
       libraries:
         - file:
             path: ../pipelines/silver/transformations/event_view_item.sql
