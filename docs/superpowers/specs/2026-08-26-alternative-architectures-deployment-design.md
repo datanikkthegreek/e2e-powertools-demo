@@ -1,0 +1,127 @@
+# Alternative Architectures Deployment Design
+
+## Goal
+
+Deploy Options 2–5 to the FEVM workspace as independent, demo-ready architectures while leaving the productive Genie space, ETL bundle, and webshop App unchanged.
+
+Target:
+
+- Profile: `FEVM`
+- Catalog: `nikks_fevm_workspace_7405607030687545`
+- Schema: `techsummit`
+- Warehouse: an existing FEVM serverless warehouse
+- Documents: `/Volumes/nikks_fevm_workspace_7405607030687545/techsummit/productmanuals/`
+
+All scripts use stable display names and create-or-reuse behavior. They never delete resources automatically.
+
+## Shared Structured Analytics Definition
+
+Create three new Genie spaces from the existing Bosch Power Tools analytics definition:
+
+- `Bosch Power Tools — Option 2 Analytics`
+- `Bosch Power Tools — Option 3 Analytics`
+- `Bosch Power Tools — Option 4 Analytics + Manuals`
+
+Each space uses the same seven structured tables, joins, instructions, and benchmark SQL as the existing productive Genie space. Options 2 and 3 contain no volume or manual-search tool. Option 4 adds the Unity Catalog manual-search function as its unstructured retrieval tool.
+
+The productive Genie space remains unchanged.
+
+## Option 2: Managed Knowledge Assistant and Supervisor
+
+Components:
+
+1. Structured-only Option 2 Genie space.
+2. Knowledge Assistant backed directly by the `productmanuals` volume.
+3. Supervisor Agent with the Genie space and Knowledge Assistant as tools.
+4. Option 2 tab in the shared App, calling the Supervisor endpoint.
+
+This is the managed reference architecture. Databricks owns document ingestion, retrieval, citations, routing, and agent serving.
+
+## Option 3: Custom AI Search, Knowledge Assistant, and Supervisor
+
+Components:
+
+1. Parse the manuals once using `ai_parse_document`.
+2. Prepare context-enriched chunks using `ai_prep_search`.
+3. Persist chunks in a Delta table with change data feed enabled.
+4. Create or reuse a Vector Search endpoint and Delta Sync AI Search index.
+5. Create an index-backed Knowledge Assistant.
+6. Create a structured-only Option 3 Genie space.
+7. Create a Supervisor Agent with the Genie space and Knowledge Assistant as tools.
+8. Option 3 tab in the shared App, calling the Supervisor endpoint.
+
+The index embeds `chunk_to_embed`, returns `chunk_to_retrieve`, retains `source_path`, and uses a triggered sync pipeline.
+
+## Option 4: AI Search Function in Genie
+
+Components:
+
+1. A separate parse/prep Delta chunk table and AI Search index.
+2. A Unity Catalog table function that calls the index and returns manual text, source path, and score.
+3. Option 4 Genie space with the same structured analytics definition plus the function and instructions describing when to call it.
+
+Option 4 is demonstrated in the native Genie UI. It does not need a Supervisor or a custom App tab.
+
+## Option 5: Custom Agent Framework in the Shared App
+
+Components:
+
+1. A separate parse/prep Delta chunk table and AI Search index.
+2. A custom agent built with the Databricks agent framework.
+3. Explicit tools for read-only SQL analytics, manual retrieval, and small business-context lookups.
+4. Custom routing and synthesis instructions.
+5. Option 5 tab in the shared App.
+
+Option 5 recreates only the capabilities needed by this demo. It does not claim full Genie feature parity. SQL execution uses a restricted read-only contract and bounded result sets.
+
+## Shared Databricks App
+
+Deploy one new App named `powertools-architecture-options` with three tabs:
+
+- Option 2 — Managed KA + Supervisor
+- Option 3 — Custom AI Search + KA + Supervisor
+- Option 5 — Custom Agent Framework
+
+Each tab contains a small chat surface, architecture label, example prompts, response output, and source/tool details when returned. The backend calls the corresponding Supervisor endpoint for Options 2 and 3 and hosts/invokes the custom Option 5 agent.
+
+The App configuration receives endpoint names, warehouse id, index names, catalog, and schema as environment variables. No credentials are stored in source files.
+
+## Deployment Order
+
+1. Verify FEVM identity, warehouse, schema, source tables, and manuals volume.
+2. Create the three Genie space copies.
+3. Materialize Option 3–5 chunk tables.
+4. Create/reuse AI Search endpoints and indexes; sync and wait for readiness.
+5. Create the Option 4 Unity Catalog function and attach it to its Genie space.
+6. Create/reuse Option 2 and 3 Knowledge Assistants.
+7. Create/reuse Option 2 and 3 Supervisors and tools.
+8. Build and deploy the shared App with the resolved resource identifiers.
+9. Run smoke tests through every architecture.
+
+## Error Handling and Safety
+
+- Resource lookup uses stable names before creation.
+- Existing resources are updated or reused; nothing is automatically deleted.
+- Scripts fail early when tables, volume, warehouse, or required APIs are unavailable.
+- AI processing errors are excluded from chunk tables and reported through validation counts.
+- SQL generated by Option 5 must be one read-only `SELECT` or `WITH` statement and is executed with a row limit.
+- App responses expose upstream errors clearly instead of fabricating answers.
+
+## Validation
+
+- Validate all Python, TypeScript, shell, SQL, bundle, and App configuration locally.
+- Confirm all three Genie spaces reference the intended seven tables.
+- Confirm Options 2 and 3 do not have volume/manual function tools.
+- Confirm Option 4 has the manual-search function.
+- Query each AI Search index and verify source paths are returned.
+- Query each KA with a manual-only question.
+- Query each Supervisor with analytics-only, manual-only, and blended questions.
+- Exercise all three shared App tabs.
+- Record deployed resource ids and URLs in each option's notes.
+
+## Out of Scope
+
+- Changing the productive Genie space, ETL bundle, or webshop App.
+- Automatic deletion or teardown.
+- Production-grade load testing, on-call monitoring, or multi-tenant authorization.
+- Full Genie parity in Option 5.

@@ -1,0 +1,12 @@
+command: ['npm', 'run', 'start']
+env:
+  - name: DATABRICKS_VS_INDEX_NAME
+    valueFrom: vector-search-index
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: DATABRICKS_OPTION2_ENDPOINT
+    valueFrom: option2-supervisor
+  - name: DATABRICKS_SERVING_ENDPOINT_NAME
+    valueFrom: option2-supervisor
+  - name: DATABRICKS_OPTION3_ENDPOINT
+    valueFrom: option3-supervisor
