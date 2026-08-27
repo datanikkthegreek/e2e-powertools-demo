@@ -1,0 +1,11 @@
+CREATE OR REPLACE TABLE nikks_fevm_workspace_7405607030687545.techsummit.option4_manual_chunks
+DEEP CLONE nikks_fevm_workspace_7405607030687545.techsummit.option3_manual_chunks;
+
+ALTER TABLE nikks_fevm_workspace_7405607030687545.techsummit.option4_manual_chunks
+SET TBLPROPERTIES (delta.enableChangeDataFeed = true);
+
+CREATE OR REPLACE TABLE nikks_fevm_workspace_7405607030687545.techsummit.option5_manual_chunks
+DEEP CLONE nikks_fevm_workspace_7405607030687545.techsummit.option3_manual_chunks;
+
+ALTER TABLE nikks_fevm_workspace_7405607030687545.techsummit.option5_manual_chunks
+SET TBLPROPERTIES (delta.enableChangeDataFeed = true);

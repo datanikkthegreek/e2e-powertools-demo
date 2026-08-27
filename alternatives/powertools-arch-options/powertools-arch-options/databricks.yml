@@ -1,0 +1,74 @@
+bundle:
+  name: powertools-arch-options
+
+variables:
+  vector_search_index_id:
+    description: Three-level UC name of the default index (catalog.schema.index_name)
+  sql_warehouse_id:
+    description: SQL Warehouse ID
+  option2_endpoint:
+    description: Option 2 Supervisor endpoint
+  option3_endpoint:
+    description: Option 3 Supervisor endpoint
+
+resources:
+  apps:
+    app:
+      name: "powertools-arch-options"
+      description: "Compare managed and custom Bosch Power Tools agent architectures"
+      source_code_path: ./
+
+      # Start the app automatically on deploy.
+      lifecycle:
+        started: true
+      # The resources which this app has access to.
+      resources:
+        - name: vector-search-index
+          uc_securable:
+            securable_full_name: ${var.vector_search_index_id}
+            securable_type: TABLE
+            permission: SELECT
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: CAN_USE
+        - name: option2-supervisor
+          serving_endpoint:
+            name: ${var.option2_endpoint}
+            permission: CAN_QUERY
+        - name: option3-supervisor
+          serving_endpoint:
+            name: ${var.option3_endpoint}
+            permission: CAN_QUERY
+        - name: option5-search-manuals
+          uc_securable:
+            securable_full_name: nikks_fevm_workspace_7405607030687545.techsummit.option5_search_manuals
+            securable_type: FUNCTION
+            permission: EXECUTE
+        - name: option5-product-performance
+          uc_securable:
+            securable_full_name: nikks_fevm_workspace_7405607030687545.techsummit.option5_product_performance
+            securable_type: FUNCTION
+            permission: EXECUTE
+        - name: option5-revenue-country
+          uc_securable:
+            securable_full_name: nikks_fevm_workspace_7405607030687545.techsummit.option5_revenue_by_country
+            securable_type: FUNCTION
+            permission: EXECUTE
+        - name: option5-product-specs
+          uc_securable:
+            securable_full_name: nikks_fevm_workspace_7405607030687545.techsummit.option5_product_specs
+            securable_type: FUNCTION
+            permission: EXECUTE
+
+targets:
+  default:
+    default: true
+    workspace:
+      host: https://adb-7405607030687545.5.azuredatabricks.net
+
+    variables:
+      vector_search_index_id: nikks_fevm_workspace_7405607030687545.techsummit.option5_manual_index
+      sql_warehouse_id: a8384833e450ec4e
+      option2_endpoint: mas-5a4c8e31-endpoint
+      option3_endpoint: mas-8b81ed97-endpoint
