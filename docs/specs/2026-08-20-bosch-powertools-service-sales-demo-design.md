@@ -128,14 +128,11 @@ e2e-powertools-demo/
       lakebase.yml              # Lakebase project 'techsummit' (OLTP: products[no specs], accounts,
                                 #   carts, cart_items, purchases, purchase_lines)
       sync.yml                  # Lakebase -> Delta CDC sync (wal2delta) for required tables
-      pipeline_silver.yml       # gtm_events -> event_view_item + event_add_to_cart ONLY
-      job_seed.yml              # seed_gtm_events with multi-week backfill
-      job_curate.yml            # CDC->current collapse, key-normalize, IDP -> product_specs, Genie tables
+      pipeline_silver.yml       # continuous event + CDC + IDP pipeline
+      job_build.yml             # one-time CDC gate, UUID function, GTM backfill seed
     src/
       seed_gtm_events.py        # behavior seed (bug-fixed; view/cart focus)
-      cdc_to_current.sql        # lb_*_history -> current-state dim/fact tables
-      key_normalize.sql         # binary/uuid id -> canonical text; item_id -> product_id
-      idp_product_specs.sql     # ai_parse_document + ai_extract -> product_specs (+ model->id crosswalk)
+      create_canonical_uuid.sql # shared Lakebase-CDF binary UUID normalization
     data/
       datasheets/               # real Bosch datasheet PDFs (IDP source)
       manuals/                  # real Bosch manuals (usage + repair; KA source)
@@ -161,16 +158,14 @@ documents their configuration so they can be recreated.
         |
         | behavior (GA4-style, seeded + backfilled)
         v
-   gtm_events (raw Delta) --silver--> event_view_item, event_add_to_cart
-                                            |  (id-normalize: item_id -> product_id)
-                                            v
-                                  fact_view_item, fact_add_to_cart
+   gtm_events (raw Delta) --continuous silver--> event_view_item, event_add_to_cart
+                                                   (canonical product_id; Genie reads directly)
 
   REAL Bosch datasheet PDFs (Volume) -> ai_parse_document -> ai_extract -> product_specs
   REAL Bosch manuals (Volume) -------> Knowledge Assistant endpoint
 
-  GENIE SPACE  <-  dim_product, product_specs, dim_customer,
-                   fact_purchase, fact_purchase_line, fact_view_item, fact_add_to_cart
+  GENIE SPACE  <-  dim_product, idp_product_specs, dim_customer,
+                   fact_purchase, fact_purchase_line, event_view_item, event_add_to_cart
         \                                                   /
          +--------> SUPERVISOR AGENT  <-- Knowledge Assistant
                       (routes + synthesizes)  -->  AI Playground
@@ -183,17 +178,17 @@ the Supervisor natively.
 
 Lean star, **current-state only** — Genie never sees the raw `lb_*_history` CDC
 tables or any gold MV. Product key is canonical **text uuid** `product_id`
-everywhere (see key-normalization step).
+everywhere; the GTM seed writes canonical UUIDs before the event stream is read.
 
 | Table | Grain | Key columns | Source |
 |---|---|---|---|
 | `dim_product` | 1 / SKU | `product_id` (text uuid), `name`, `category`, `price_eur` | Lakebase `products` (specs removed) → CDC → current |
-| `product_specs` | 1 / SKU | `product_id`, `model_name`, `voltage_v`, `max_torque_nm`, `no_load_rpm`, `chuck_capacity_mm`, `weight_kg`, `battery_platform` (typed numerics) | IDP from datasheet PDFs + `model_name → product_id` crosswalk |
+| `idp_product_specs` | 1 / extracted model | `source_path`, `model_name`, `voltage_v`, `max_torque_nm`, `no_load_rpm`, `chuck_capacity_mm`, `weight_kg`, `battery_platform` (typed numerics) | IDP from datasheet PDFs |
 | `dim_customer` | 1 / customer | `customer_id`, `city`, `country`, `signup_date` | Lakebase `accounts` → CDC → current |
 | `fact_purchase` | 1 / order | `purchase_id`, `customer_id`, `cart_id`, `created_at`, `total_eur` | Lakebase `purchases` → CDC → current |
 | `fact_purchase_line` | 1 / order line | `purchase_id`, `product_id`, `quantity`, `unit_price_eur`, `name_snapshot` | Lakebase `purchase_lines` → CDC → current |
-| `fact_view_item` | 1 / PDP view | `event_ts`, `user_id` (→`customer_id`), `product_id` (from `item_id`), `session_id` | Delta silver `event_view_item` (+ id-normalize) |
-| `fact_add_to_cart` | 1 / cart action | `event_ts`, `user_id`, `cart_id`, `product_id` (from `item_id`), `quantity_delta`, `cart_action` | Delta silver `event_add_to_cart` (+ id-normalize) |
+| `event_view_item` | 1 / PDP view | `ingest_timestamp`, `user_id` (→`customer_id`), `product_id`, `ga_session_id` | Continuous silver stream from `gtm_events` |
+| `event_add_to_cart` | 1 / cart action | `source_timestamp`, `user_id`, `cart_id`, `product_id`, `quantity_delta`, `cart_action` | Continuous silver stream from `gtm_events` |
 
 Deliberately excluded from Genie: gold cart MVs, `gold_customer_360`, the
 purchase/pageview/abandon/signup silver tables, and every `lb_*_history` table.
@@ -209,21 +204,19 @@ purchase/pageview/abandon/signup silver tables, and every `lb_*_history` table.
    backfill (~100 users) so the funnel has statistical body → `gtm_events` (raw).
    Validate that `event_view_item` and `event_add_to_cart` volumes are
    realistic. *(etl bundle → `job_seed.yml`)*
-4. **Silver pipeline (trimmed)** — `gtm_events` → `event_view_item` +
-   `event_add_to_cart` **only**. *(etl bundle → `pipeline_silver.yml`)*
+4. **Continuous silver pipeline** — independently started after the one-time
+   seed and left running (always-on compute). It processes `gtm_events`, Lakebase
+   CDC, and IDP inputs. It is not a task in the finite build job.
 5. **Lakebase → Delta CDC sync** — `wal2delta` WAL→Delta for
    `products` / `accounts` / `purchases` / `purchase_lines` → `lb_*_history`.
    *(etl bundle → `sync.yml`)*
-6. **CDC → current-state collapse** — per history table:
-   `QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY _pg_lsn DESC)=1` and drop
-   `_pg_change_type='delete'` → `dim_product`, `dim_customer`, `fact_purchase`,
-   `fact_purchase_line`. *(etl bundle → `cdc_to_current.sql`)*
-7. **Key normalization** — one shared step casting binary/UUID `id` → canonical
-   text so behavioral `item_id` = Lakebase `product_id`; produces
-   `fact_view_item` / `fact_add_to_cart`. *(etl bundle → `key_normalize.sql`)*
-8. **IDP → `product_specs`** — `ai_parse_document` + `ai_extract` on datasheet
-   PDFs → typed numeric spec columns; join to `dim_product` via a deterministic
-   12-row `model_name → product_id` crosswalk. *(etl bundle → `idp_product_specs.sql`)*
+6. **CDC → current state** — native AUTO CDC flows continuously maintain
+   `dim_product`, `dim_customer`, `fact_purchase`, and `fact_purchase_line`.
+7. **Behavioral keys** — `seed_gtm_events` writes canonical UUID text; the
+   continuous event tables expose it directly as `product_id`, with no duplicate
+   behavioral fact tables.
+8. **IDP → `idp_product_specs`** — `ai_parse_document` + typed `ai_extract`
+   on datasheet PDFs, continuously processed by the silver pipeline.
 9. **Genie curation** — table/column descriptions + curated example questions;
    point the Genie space only at the 7 base tables above.
 10. **Manuals → Knowledge Assistant** (separate track) — PDFs in the Volume →

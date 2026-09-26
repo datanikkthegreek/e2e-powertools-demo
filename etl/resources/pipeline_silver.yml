@@ -40,6 +40,7 @@ resources:
       catalog: ${var.catalog}
       schema: ${var.schema}
       serverless: true
+      continuous: true
       channel: "PREVIEW"
       configuration:
         spark.databricks.sql.dsv2.unique.enabled: "true"
@@ -63,8 +64,8 @@ resources:
         - file:
             path: ../pipelines/silver/transformations/idp_product_specs.sql
 
-# The silver pipeline is run as the `run_silver_pipeline` task inside the
-# powertools-build orchestration job (../resources/job_build.yml), so the
-# seed -> silver -> curate order is a single enforced DAG. There is no
-# standalone "run pipeline" job: the app's Analytics page (its only caller)
-# has been removed.
+# This is an independently started, always-on continuous pipeline. The finite
+# powertools-build job only performs initialization/backfill and must complete;
+# it never waits on this pipeline. Start the pipeline after the one-time job has
+# seeded gtm_events, then leave it RUNNING to process CDC, behavioral events,
+# and datasheets continuously. Continuous mode uses always-on compute by design.

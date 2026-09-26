@@ -37,21 +37,25 @@ one produced. Run it in exactly this order:
    `…techsummit.datasheets` (read by the IDP streaming tables) and
    `etl/data/manuals/*.pdf` → `…techsummit.productmanuals` (the KA source). The
    script is idempotent (`databricks fs cp --overwrite`, kebab filenames kept).
-5. **Run `powertools-build`.** One job, one enforced DAG:
-   `wait_for_cdc` (gate) → `seed_gtm_events` (c) → `run_silver_pipeline` (d) →
-   `key_normalize` (e).
-   The silver pipeline (d) now builds most of the base tables as streaming tables:
+5. **Run `powertools-build` exactly once.** This finite initialization/backfill
+   job runs `wait_for_cdc` and `create_canonical_uuid` concurrently, then
+   `seed_gtm_events` after both succeed. Never schedule or loop this job:
+   `seed_gtm_events` appends to `gtm_events`, so rerunning it doubles the funnel.
+6. **Start `powertools_silver` independently and leave it RUNNING.** It is a
+   continuous pipeline and therefore cannot be a task in the finite build job.
+   Continuous mode uses always-on compute by design. It builds:
    - the two event tables (`event_view_item`, `event_add_to_cart`) from `gtm_events`;
    - the four current-state tables (`dim_product`, `dim_customer`, `fact_purchase`,
      `fact_purchase_line`) from the `lb_*_history` change-logs via **native AUTO
      CDC** (the engine does the CDC merge/collapse in-pipeline — no ROW_NUMBER
      collapse task);
-   - IDP (datasheet PDFs → `product_specs`) as three streaming tables.
+   - IDP (datasheet PDFs → `idp_product_specs`) as three streaming tables.
 
-   IDP and the CDC tables no longer depend on the curate step. `key_normalize` (e)
-   is the terminal warehouse task and produces `fact_view_item` / `fact_add_to_cart`
-   from the event silver tables; it has no data dependency on the CDC tables but
-   runs after the pipeline. This builds the 7 Genie base tables.
+   Genie consumes `event_view_item` and `event_add_to_cart` directly. The GTM
+   seed already writes canonical product UUIDs, so there is no downstream
+   behavioral `fact_*` normalization layer. Together with `dim_product`,
+   `dim_customer`, `fact_purchase`, `fact_purchase_line`, and
+   `idp_product_specs`, these are the 7 Genie base tables.
    > **Reprocessing:** the CDC + IDP stages are streaming (and `ai_extract` is
    > pinned to `version 2.0`). Changing an IDP prompt/schema/version — or needing
    > to re-collapse a CDC table — does **not** re-run over inputs already consumed;
@@ -60,7 +64,7 @@ one produced. Run it in exactly this order:
    > A full refresh recomputes the event + CDC tables from the existing
    > `gtm_events` / `lb_*_history` (it does **not** re-run `seed_gtm_events`), so
    > the funnel counts stay put.
-6. **Build:** Knowledge Assistant (manuals) — see the
+7. **Build:** Knowledge Assistant (manuals) — see the
    **Knowledge Assistant (product manuals)** section below; it is built by
    running the **`etl/src/create_or_update_knowledge_assistant.ipynb`** notebook
    in the workspace (Databricks **SDK**, `w.knowledge_assistants`). Genie space

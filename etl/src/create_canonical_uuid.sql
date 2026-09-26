@@ -4,7 +4,7 @@
 -- lb_*_history change-log (verified live 2026-08-22, typeof(id)='binary'). A
 -- plain CAST(binary AS STRING) is garbage bytes, so every OLTP/CDC site must
 -- reduce the id to canonical lowercase hyphenated UUID text (8-4-4-4-12) before
--- the behavioral funnel can join behavioral product_id == dim_product.product_id.
+-- the behavioral funnel can join event_*.product_id == dim_product.product_id.
 --
 -- This function centralizes that transform so the four silver AUTO CDC flows
 -- (dim_product / dim_customer / fact_purchase / fact_purchase_line) and the GTM
@@ -27,10 +27,9 @@
 -- names follow the pipeline's configured schema, and this bare function call
 -- follows the catalog's default schema — neither hardcodes techsummit.
 --
--- NOTE: this is the BINARY side only. The behavioral read-back side
--- (etl/src/key_normalize.sql) sees item_id already as canonical lowercase text
--- and stays lower(CAST(... AS STRING)) — a BINARY-typed function cannot serve a
--- STRING column, so that file is intentionally left untouched.
+-- NOTE: this is the BINARY side only. seed_gtm_events writes behavioral item_id
+-- as canonical lowercase text, and event_* exposes that value directly as
+-- product_id; a second normalization layer is unnecessary.
 --
 -- Created by the `create_canonical_uuid` task of the powertools-build job
 -- (../resources/job_build.yml), which completes before its consumers

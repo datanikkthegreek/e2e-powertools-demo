@@ -3,8 +3,8 @@
 -- Streams the raw gtm_events table and decodes only the eventData fields this
 -- table needs. Table + source are referenced by bare name so they resolve in
 -- the pipeline's own configured catalog/schema (see etl/resources/pipeline_silver.yml).
--- Downstream (etl/src/key_normalize.sql) reads product_id / user_id /
--- ga_session_id; those are the load-bearing columns.
+-- Genie consumes this table directly. product_id is already the canonical UUID
+-- emitted by seed_gtm_events; no downstream normalization layer is required.
 CREATE OR REFRESH STREAMING TABLE event_view_item (
   ingest_timestamp TIMESTAMP                                                                                           COMMENT 'Timestamp when the event was ingested into the data platform (UTC). Derived from the raw ingestion_time epoch.',
   user_id          STRING                                                                                              COMMENT 'Unique identifier for the user who viewed the product. Ties behavioral events to dim_customer via downstream key normalization.',

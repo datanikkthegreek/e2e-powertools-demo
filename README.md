@@ -37,7 +37,7 @@ e2e-powertools-demo/
     resources/
       lakebase.yml           # Lakebase project 'techsummit' (pg17) + productmanuals/datasheets Volumes + CDF setup notes
       pipeline_silver.yml    # gtm_events -> event_*, lb_*_history -> dim/fact (AUTO CDC), PDFs -> product_specs (IDP)
-      job_build.yml          # one DAG: seed_gtm -> silver(CDC+IDP) -> key_normalize
+      job_build.yml          # one-time init/backfill: CDC gate + UUID function + GTM seed
     pipelines/silver/transformations/
       event_view_item.sql    # STREAMING TABLE: STREAM(gtm_events) -> view_item
       event_add_to_cart.sql  # STREAMING TABLE: STREAM(gtm_events) -> add_to_cart
@@ -51,7 +51,6 @@ e2e-powertools-demo/
     src/
       seed_gtm_events.py     # behavior seed (view/cart focus)
       seed_lakebase_oltp.py  # seed OLTP + set REPLICA IDENTITY FULL (CDF prereq)
-      key_normalize.sql      # item_id -> product_id -> fact_view_item / fact_add_to_cart
     data/
       datasheets/            # (empty, .gitkeep) real Bosch datasheet PDFs — added later
       manuals/               # (empty, .gitkeep) real Bosch manuals — added later
@@ -122,9 +121,16 @@ stay.
 
 ## Genie base tables (7)
 
-`dim_product`, `product_specs`, `dim_customer`, `fact_purchase`,
-`fact_purchase_line`, `fact_view_item`, `fact_add_to_cart`. The Genie space,
+`dim_product`, `idp_product_specs`, `dim_customer`, `fact_purchase`,
+`fact_purchase_line`, `event_view_item`, `event_add_to_cart`. Behavioral
+`product_id` values are canonical when seeded, so Genie reads `event_*`
+directly without a duplicate `fact_*` normalization layer. The Genie space,
 Knowledge Assistant, and Supervisor agent are UI-built (see `RUNBOOK.md`).
+
+`powertools-build` is a strictly one-time initialization/backfill job. Never
+schedule or loop it: `seed_gtm_events` appends and rerunning it would double the
+funnel. After that job completes, start `powertools_silver` independently and
+leave it RUNNING in continuous mode. This is intended always-on compute.
 
 ## Notes / follow-ups
 

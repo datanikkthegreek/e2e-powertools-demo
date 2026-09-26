@@ -3,9 +3,8 @@
 -- Streams the raw gtm_events table and decodes only the eventData fields this
 -- table needs. Table + source are referenced by bare name so they resolve in
 -- the pipeline's own configured catalog/schema (see etl/resources/pipeline_silver.yml).
--- Downstream (etl/src/key_normalize.sql) reads source_timestamp / user_id /
--- cart_id / product_id / quantity_delta / cart_action; the rest round out the
--- cart action for analytics.
+-- Genie consumes this table directly. product_id is already the canonical UUID
+-- emitted by seed_gtm_events; the remaining fields round out cart analytics.
 CREATE OR REFRESH STREAMING TABLE event_add_to_cart (
   source_timestamp   TIMESTAMP COMMENT 'Original event timestamp from the GA4 client (UTC). When the add-to-cart action actually occurred on the user device.',
   user_id            STRING    COMMENT 'Unique identifier for the user who performed the cart action. Ties behavioral events to dim_customer (via downstream key normalization).',

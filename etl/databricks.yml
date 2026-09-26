@@ -8,7 +8,7 @@ bundle:
 #   Lakebase (products/accounts/carts/purchases) --Lakebase CDF--> lb_*_history
 #     --silver pipeline AUTO CDC--> dim_* / fact_* (current state)
 #   gtm_events (raw) --silver--> event_view_item + event_add_to_cart
-#     --key-normalize--> fact_view_item / fact_add_to_cart
+#     (Genie consumes these canonical-key event_* tables directly)
 #   datasheet PDFs --IDP (silver pipeline)--> _parsed_datasheets
 #     --> _extracted_specs --> product_specs (typed, not keyed to dim_product)
 #

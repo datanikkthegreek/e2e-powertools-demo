@@ -111,10 +111,9 @@ def _load_products(spark: SparkSession, catalog: str, schema: str) -> list[dict]
             # catalog's `default` schema and is fully qualified here (the seed runs
             # on a generic cluster with no default schema set). The BINARY-typed
             # parameter documents intent, though SQL may apply an implicit cast, so
-            # it is a guard not an absolute guarantee. The BEHAVIORAL read-back side
-            # (etl/src/key_normalize.sql) then sees item_id already as canonical
-            # lowercase text, so it uses the simple lower(CAST(...)) form — the
-            # regex there was proven dead weight.
+            # it is a guard not an absolute guarantee. The event_* pipeline tables
+            # therefore receive item_id as canonical lowercase text and expose it
+            # directly as product_id for Genie joins.
             F.expr(f"{catalog}.default.canonical_uuid(id)").alias("product_id"),
             F.col("name"),
             F.col("price_eur"),
