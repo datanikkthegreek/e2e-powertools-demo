@@ -14,7 +14,10 @@ sync:
 
 artifacts:
   default:
-    build: apx build
+    # Vite replaces import.meta.env values at build time. Keep this aligned
+    # with CDP_DEMO_WEB_SHOP_INGESTION_MODE in app.yml so browser events use
+    # /api/events instead of falling back to the Google gtag path.
+    build: VITE_INGESTION_MODE=zerobus apx build
 
 targets:
   dev:

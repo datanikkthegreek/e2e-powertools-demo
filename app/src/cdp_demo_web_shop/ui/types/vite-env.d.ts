@@ -2,6 +2,7 @@
 declare const __APP_NAME__: string;
 
 interface ImportMetaEnv {
+  readonly VITE_INGESTION_MODE?: "gtm" | "zerobus";
   readonly VITE_GA4_MEASUREMENT_ID?: string;
   readonly VITE_GTM_TRANSPORT_URL?: string;
 }
