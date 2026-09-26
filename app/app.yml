@@ -25,7 +25,7 @@ env:
     value: "https://adb-7405607030687545.5.azuredatabricks.net"
   # TODO(deploy): set the FEVM Zerobus ingestion endpoint host for this workspace.
   - name: CDP_DEMO_WEB_SHOP_ZEROBUS_ENDPOINT
-    value: "REPLACE_WITH_FEVM_ZEROBUS_ENDPOINT"
+    value: "https://7405607030687545.zerobus.eastus.azuredatabricks.net"
   - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CATALOG
     value: "nikks_fevm_workspace_7405607030687545"
   - name: CDP_DEMO_WEB_SHOP_ZEROBUS_SCHEMA
@@ -34,7 +34,7 @@ env:
     value: "gtm_events"
   # TODO(deploy): set the Zerobus OAuth client id created for the techsummit env.
   - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CLIENT_ID
-    value: "REPLACE_WITH_FEVM_ZEROBUS_CLIENT_ID"
+    value: "a76c1a8e-da22-4ebf-add2-f0e7650b06f3"
   - name: CDP_DEMO_WEB_SHOP_ZEROBUS_CLIENT_SECRET
     valueFrom: "zerobus-client-secret"
   # --- GTM / GA4 identifiers ---
