@@ -15,8 +15,7 @@
 --   v2.1 -> {"response":{"specs":[{"voltage_v":{"value":18},...}]}}
 -- Pinning v2.0 makes the shape deterministic, so we CAST the `response.specs`
 -- variant array straight into a typed ARRAY<STRUCT<...>> with NO `.value`
--- unwrap. That array is what product_specs explodes downstream, exactly the way
--- event_view_item's `items` array is exploded in key_normalize. Bare names
+-- unwrap. That array is what idp_product_specs explodes downstream. Bare names
 -- resolve in the pipeline's configured catalog/schema (see
 -- etl/resources/pipeline_silver.yml).
 --

@@ -1,8 +1,7 @@
 -- Silver / IDP (3 of 3): explode typed specs -> idp_product_specs.
 --
 -- Streams _extracted_specs and EXPLODES its `specs` ARRAY<STRUCT> to one row per
--- extracted model, exactly the way event_view_item's `items` array is exploded
--- in key_normalize (LATERAL VIEW explode). Plain explode (not OUTER) keeps this
+-- extracted model. Plain explode (not OUTER) keeps this
 -- truly one-row-per-extracted-model: a datasheet that extracts nothing produces
 -- no row rather than an all-NULL placeholder. Each of the 12 datasheets yields
 -- exactly one model today, so idp_product_specs is 12 rows.

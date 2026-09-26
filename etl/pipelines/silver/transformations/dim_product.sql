@@ -22,11 +22,11 @@
 --   That transform now lives in ONE place — the canonical_uuid() UC function
 --   (etl/src/create_canonical_uuid.sql, created by the create_canonical_uuid job
 --   task before this pipeline runs) — so dim_product.product_id equals
---   fact_view_item/fact_add_to_cart.product_id. The BINARY-typed parameter
+--   event_view_item/event_add_to_cart.product_id. The BINARY-typed parameter
 --   documents intent and catches an obviously-wrong argument, though SQL may still
 --   apply an implicit cast, so it is a guard rather than an absolute guarantee.
---   The behavioral side (key_normalize.sql) sees item_id already as canonical
---   lowercase text, so it uses the simple lower(CAST(...)) form — see that note.
+--   The behavioral event tables receive item_id already as canonical lowercase
+--   text and expose it directly as product_id.
 -- The call is BARE (canonical_uuid). The function lives in the catalog's `default`
 -- schema (etl/src/create_canonical_uuid.sql) and SDP's function search path
 -- includes <catalog>.default, so a bare call resolves there (verified live

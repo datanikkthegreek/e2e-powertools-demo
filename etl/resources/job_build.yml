@@ -1,6 +1,7 @@
-# Build job — the single orchestration DAG that turns raw sources into the 7
-# base tables Genie consumes. One job so the ordering is a real, enforced
-# task dependency graph rather than a hope expressed in the RUNBOOK.
+# Build job — one-time initialization/backfill only. It waits for the CDC
+# sources, creates the shared UUID function, and appends the deterministic GTM
+# seed exactly once. The always-on silver pipeline is started independently;
+# keeping it out of this finite DAG prevents the job from waiting forever.
 #
 # Full pipeline order (see ../../RUNBOOK.md):
 #   (a) provision Lakebase + seed OLTP  — deploy etl/, then run
@@ -13,11 +14,11 @@
 #       and the silver pipeline's AUTO CDC flows (read all lb_*_history) need it
 #       populated first. The `wait_for_cdc` gate task below enforces that
 #       readiness before any data task runs.
-#   wait_for_cdc (gate) + create_canonical_uuid (UC function) -> (c) GTM behavior
-#       seed -> (d) silver pipeline -> (e) key_normalize are the tasks below,
-#       chained so each runs strictly after the last. The CDC current-state
-#       collapse (dim_*/fact_*) is no longer a separate task — it is now native
-#       AUTO CDC inside the silver pipeline (d). The binary-UUID normalization is
+#   wait_for_cdc (gate) + create_canonical_uuid (UC function) -> (c) one-time GTM
+#       behavior seed are the tasks below. Never schedule or repeat this job:
+#       seed_gtm_events appends and a rerun would double the funnel. The CDC
+#       current-state collapse (dim_*/fact_*) is native AUTO CDC inside the
+#       independently running silver pipeline. Binary-UUID normalization is
 #       centralized in the canonical_uuid(BINARY) UC function; create_canonical_uuid
 #       has no dependency, so it runs CONCURRENTLY with wait_for_cdc but always
 #       COMPLETES BEFORE its consumers — the seed (which normalizes binary ids) and
@@ -28,8 +29,7 @@ resources:
   jobs:
     powertools_build:
       name: "powertools-build"
-      # No `volume` job parameter: none of these tasks touch the PDF Volumes
-      # (they gate on CDC, seed GTM, run the silver pipeline, key-normalize).
+      # No `volume` job parameter: none of these one-time tasks touch PDF Volumes.
       # The raw-doc Volumes were split into productmanuals + datasheets; the
       # only file-reading consumer is the IDP transformation, which carries its
       # own literal Volume path (see idp_parsed_datasheets.sql).
@@ -87,35 +87,6 @@ resources:
               - "--weeks=6"
               - "--users=100"
 
-        # (d) silver pipeline. Builds, all as streaming tables:
-        #     - gtm_events -> event_view_item + event_add_to_cart
-        #     - lb_*_history -> dim_product / dim_customer / fact_purchase /
-        #       fact_purchase_line via NATIVE AUTO CDC (the engine does the
-        #       CDC merge/collapse — no ROW_NUMBER warehouse task). See
-        #       ../pipelines/silver/transformations/{dim_product,dim_customer,
-        #       fact_purchase,fact_purchase_line}.sql.
-        #     - datasheet PDFs -> product_specs (IDP: _parsed_datasheets ->
-        #       _extracted_specs -> product_specs). product_specs no longer joins
-        #       dim_product, so IDP does not depend on the curate task below.
-        - task_key: run_silver_pipeline
-          depends_on:
-            - task_key: seed_gtm_events
-          pipeline_task:
-            pipeline_id: ${resources.pipelines.powertools_silver.id}
-            full_refresh: false
-
-        # (e) event_* silver -> fact_view_item / fact_add_to_cart (id-normalized).
-        #     The terminal warehouse task. It has no data dependency on the CDC
-        #     tables (it only reads the event_* silver tables), but must run after
-        #     the silver pipeline that produces them — hence depends_on the
-        #     pipeline (which now also builds the CDC current-state tables).
-        - task_key: key_normalize
-          depends_on:
-            - task_key: run_silver_pipeline
-          sql_task:
-            warehouse_id: ${var.warehouse_id}
-            file:
-              path: ../src/key_normalize.sql
       environments:
         - environment_key: default
           spec:
