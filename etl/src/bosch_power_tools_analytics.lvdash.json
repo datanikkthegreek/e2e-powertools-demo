@@ -1,0 +1,962 @@
+{
+  "datasets": [
+    {
+      "displayName": "Total Orders",
+      "name": "total_orders",
+      "queryLines": [
+        "SELECT\n",
+        "  COUNT(*) AS total_orders\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase"
+      ]
+    },
+    {
+      "displayName": "Revenue by Product",
+      "name": "revenue_by_product",
+      "queryLines": [
+        "SELECT\n",
+        "  p.name AS product_name,\n",
+        "  ROUND(SUM(pl.quantity * pl.unit_price_eur), 2) AS revenue_eur\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase_line pl\n",
+        "    JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_product p\n",
+        "      ON pl.product_id = p.product_id\n",
+        "GROUP BY\n",
+        "  p.name\n",
+        "ORDER BY\n",
+        "  revenue_eur DESC"
+      ]
+    },
+    {
+      "displayName": "Revenue by Country",
+      "name": "revenue_by_country",
+      "queryLines": [
+        "SELECT\n",
+        "  c.country,\n",
+        "  ROUND(SUM(fp.total_eur), 2) AS revenue_eur\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase fp\n",
+        "    JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_customer c\n",
+        "      ON fp.customer_id = c.customer_id\n",
+        "GROUP BY\n",
+        "  c.country\n",
+        "ORDER BY\n",
+        "  revenue_eur DESC"
+      ]
+    },
+    {
+      "displayName": "Total Revenue",
+      "name": "total_revenue",
+      "queryLines": [
+        "SELECT\n",
+        "  ROUND(SUM(total_eur), 2) AS total_revenue_eur\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase"
+      ]
+    },
+    {
+      "displayName": "Total Product Views",
+      "name": "total_views",
+      "queryLines": [
+        "SELECT\n",
+        "  COUNT(*) AS total_views\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.event_view_item"
+      ]
+    },
+    {
+      "displayName": "Views by Product",
+      "name": "views_by_product",
+      "queryLines": [
+        "SELECT\n",
+        "  p.name AS product_name,\n",
+        "  COUNT(*) AS view_count\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.event_view_item ev\n",
+        "    JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_product p\n",
+        "      ON ev.product_id = p.product_id\n",
+        "GROUP BY\n",
+        "  p.name\n",
+        "ORDER BY\n",
+        "  view_count ASC"
+      ]
+    },
+    {
+      "displayName": "Total Cart Actions",
+      "name": "total_cart",
+      "queryLines": [
+        "SELECT\n",
+        "  COUNT(*) AS total_cart_actions\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.event_add_to_cart"
+      ]
+    },
+    {
+      "displayName": "Product Catalog",
+      "name": "product_catalog",
+      "queryLines": [
+        "SELECT\n",
+        "  p.name,\n",
+        "  p.category,\n",
+        "  p.price_eur,\n",
+        "  s.voltage_v,\n",
+        "  s.max_torque_nm,\n",
+        "  s.weight_kg,\n",
+        "  s.battery_platform\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.dim_product p\n",
+        "    LEFT JOIN nikks_fevm_workspace_7405607030687545.techsummit.idp_product_specs s\n",
+        "      ON p.name = s.model_name\n",
+        "ORDER BY\n",
+        "  p.name"
+      ]
+    },
+    {
+      "displayName": "Cart by Product",
+      "name": "cart_by_product",
+      "queryLines": [
+        "SELECT\n",
+        "  p.name AS product_name,\n",
+        "  COUNT(*) AS cart_count\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.event_add_to_cart ac\n",
+        "    JOIN nikks_fevm_workspace_7405607030687545.techsummit.dim_product p\n",
+        "      ON ac.product_id = p.product_id\n",
+        "GROUP BY\n",
+        "  p.name\n",
+        "ORDER BY\n",
+        "  cart_count ASC"
+      ]
+    },
+    {
+      "displayName": "Purchases per Day",
+      "name": "purchases_per_day",
+      "queryLines": [
+        "SELECT\n",
+        "  DATE(created_at) AS purchase_day,\n",
+        "  COUNT(*) AS purchase_count,\n",
+        "  ROUND(SUM(total_eur), 2) AS revenue_eur\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase\n",
+        "GROUP BY\n",
+        "  DATE(created_at)\n",
+        "ORDER BY\n",
+        "  purchase_day"
+      ]
+    },
+    {
+      "displayName": "Sales by Selected Date",
+      "name": "sales_by_date",
+      "parameters": [
+        {
+          "complexType": "MULTI",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "2026-09-29"
+                }
+              ]
+            }
+          },
+          "displayName": "Selected Date",
+          "keyword": "selected_date"
+        }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  ROUND(SUM(total_eur), 2) AS revenue_eur\n",
+        "FROM\n",
+        "  nikks_fevm_workspace_7405607030687545.techsummit.fact_purchase\n",
+        "WHERE\n",
+        "  (\n",
+        "    :selected_date IS NULL\n",
+        "    OR array_contains(:selected_date, DATE(created_at))\n",
+        "  )"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "displayName": "Page 1",
+      "layout": [
+        {
+          "position": {
+            "height": 2,
+            "width": 3,
+            "x": 0,
+            "y": 0
+          },
+          "widget": {
+            "name": "total_revenue",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "total_revenue",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`total_revenue_eur`",
+                      "name": "total_revenue_eur"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "total_revenue_eur",
+                  "rowNumber": 0
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Total Revenue (EUR)"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 3,
+            "x": 3,
+            "y": 0
+          },
+          "widget": {
+            "name": "total_orders",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "total_orders",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`total_orders`",
+                      "name": "total_orders"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "total_orders",
+                  "rowNumber": 0
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Total Orders"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 3,
+            "x": 6,
+            "y": 0
+          },
+          "widget": {
+            "name": "total_views",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "total_views",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`total_views`",
+                      "name": "total_views"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "total_views",
+                  "rowNumber": 0
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Total Product Views"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 3,
+            "x": 9,
+            "y": 0
+          },
+          "widget": {
+            "name": "total_cart",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "total_cart",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`total_cart_actions`",
+                      "name": "total_cart_actions"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "total_cart_actions",
+                  "rowNumber": 0
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Total Cart Actions"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 6,
+            "x": 6,
+            "y": 2
+          },
+          "widget": {
+            "name": "rev_by_country",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "revenue_by_country",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`country`",
+                      "name": "country"
+                    },
+                    {
+                      "expression": "SUM(`revenue_eur`)",
+                      "name": "sum(revenue_eur)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "color": {
+                  "displayName": "country",
+                  "fieldName": "country",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "country",
+                  "fieldName": "country",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "revenue_eur",
+                  "fieldName": "sum(revenue_eur)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Revenue by Country"
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 12,
+            "x": 0,
+            "y": 12
+          },
+          "widget": {
+            "name": "views_by_product",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "views_by_product",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`product_name`",
+                      "name": "product_name"
+                    },
+                    {
+                      "expression": "SUM(`view_count`)",
+                      "name": "sum(view_count)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "color": {
+                  "displayName": "product_name",
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "product_name",
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "view_count",
+                  "fieldName": "sum(view_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Product Page Views by Product"
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 12,
+            "x": 0,
+            "y": 23
+          },
+          "widget": {
+            "name": "product_catalog",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "product_catalog",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`name`",
+                      "name": "name"
+                    },
+                    {
+                      "expression": "`category`",
+                      "name": "category"
+                    },
+                    {
+                      "expression": "`price_eur`",
+                      "name": "price_eur"
+                    },
+                    {
+                      "expression": "`voltage_v`",
+                      "name": "voltage_v"
+                    },
+                    {
+                      "expression": "`max_torque_nm`",
+                      "name": "max_torque_nm"
+                    },
+                    {
+                      "expression": "`weight_kg`",
+                      "name": "weight_kg"
+                    },
+                    {
+                      "expression": "`battery_platform`",
+                      "name": "battery_platform"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "name"
+                  },
+                  {
+                    "fieldName": "category"
+                  },
+                  {
+                    "fieldName": "price_eur"
+                  },
+                  {
+                    "fieldName": "voltage_v"
+                  },
+                  {
+                    "fieldName": "max_torque_nm"
+                  },
+                  {
+                    "fieldName": "weight_kg"
+                  },
+                  {
+                    "fieldName": "battery_platform"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Product Catalog with Specs"
+              },
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 6,
+            "x": 0,
+            "y": 2
+          },
+          "widget": {
+            "name": "rev_by_product",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "revenue_by_product",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`product_name`",
+                      "name": "product_name"
+                    },
+                    {
+                      "expression": "SUM(`revenue_eur`)",
+                      "name": "sum(revenue_eur)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "color": {
+                  "displayName": "product_name",
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "revenue_eur",
+                  "fieldName": "sum(revenue_eur)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "displayName": "product_name",
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Revenue by Product"
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 6,
+            "x": 0,
+            "y": 7
+          },
+          "widget": {
+            "name": "views_per_product",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "views_by_product",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`product_name`",
+                      "name": "product_name"
+                    },
+                    {
+                      "expression": "SUM(`view_count`)",
+                      "name": "sum(view_count)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "color": {
+                  "displayName": "product_name",
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "view_count",
+                  "fieldName": "sum(view_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "displayName": "product_name",
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Views per Product"
+                }
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 6,
+            "x": 6,
+            "y": 7
+          },
+          "widget": {
+            "name": "cart_per_product",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cart_by_product",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`product_name`",
+                      "name": "product_name"
+                    },
+                    {
+                      "expression": "SUM(`cart_count`)",
+                      "name": "sum(cart_count)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "color": {
+                  "displayName": "product_name",
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "cart_count",
+                  "fieldName": "sum(cart_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "displayName": "product_name",
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Add to Cart per Product"
+                }
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 6,
+            "x": 0,
+            "y": 17
+          },
+          "widget": {
+            "name": "9e304472",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "purchases_per_day",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`purchase_day`",
+                      "name": "purchase_day"
+                    },
+                    {
+                      "expression": "SUM(`purchase_count`)",
+                      "name": "sum(purchase_count)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "x": {
+                  "displayName": "Purchase Day",
+                  "fieldName": "purchase_day",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "displayName": "Purchases",
+                  "fieldName": "sum(purchase_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Purchases per Day"
+                }
+              },
+              "version": 3,
+              "widgetType": "line"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 6,
+            "x": 6,
+            "y": 18
+          },
+          "widget": {
+            "name": "total_sales",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sales_by_date",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`revenue_eur`",
+                      "name": "revenue_eur"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "revenue_eur",
+                  "rowNumber": 0
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Total Sales (EUR)"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 6,
+            "x": 6,
+            "y": 17
+          },
+          "widget": {
+            "name": "date_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1b65f3a751391a18496f5fe60915e/datasets/01f1bca9b99616bdb5995e0d4f741c78_purchase_day",
+                "query": {
+                  "datasetName": "purchases_per_day",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`purchase_day`",
+                      "name": "purchase_day"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "purchase_day_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f1b65f3a751391a18496f5fe60915e/datasets/01f1bcaaea4e155498e69f67749eca5a_selected_date",
+                "query": {
+                  "datasetName": "sales_by_date",
+                  "disaggregated": false,
+                  "parameters": [
+                    {
+                      "keyword": "selected_date",
+                      "name": "selected_date"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "purchase_day",
+                    "queryName": "dashboards/01f1b65f3a751391a18496f5fe60915e/datasets/01f1bca9b99616bdb5995e0d4f741c78_purchase_day"
+                  },
+                  {
+                    "parameterName": "selected_date",
+                    "queryName": "parameter_dashboards/01f1b65f3a751391a18496f5fe60915e/datasets/01f1bcaaea4e155498e69f67749eca5a_selected_date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Select Date"
+              },
+              "version": 2,
+              "widgetType": "filter-single-select"
+            }
+          }
+        }
+      ],
+      "layoutVersion": "GRID_V1",
+      "name": "7574093c",
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ],
+  "uiSettings": {
+    "applyModeEnabled": false,
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+resources:
+  dashboards:
+    bosch_power_tools_analytics:
+      display_name: "Bosch Power Tools Analytics"
+      warehouse_id: a8384833e450ec4e
+      file_path: ../src/bosch_power_tools_analytics.lvdash.json
