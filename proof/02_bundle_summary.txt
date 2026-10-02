@@ -1,0 +1,59 @@
+$ cd etl
+$ databricks bundle summary -t dev -p FEVM
+Name: powertools-etl
+Target: dev
+Workspace:
+  Host: https://adb-7405607030687545.5.azuredatabricks.net
+  User: nikolaos.servos@databricks.com
+  Path: /Workspace/Users/nikolaos.servos@databricks.com/.bundle/powertools-etl/dev
+Resources:
+  Genie Spaces:
+    bosch_powertools_analytics:
+      Name: Bosch Power Tools Analytics
+      URL:  https://adb-7405607030687545.5.azuredatabricks.net/genie/rooms/01f1a09a7ae41d9987122d1fe6918bcb
+  Jobs:
+    powertools_build:
+      Name: powertools-build
+      URL:  https://adb-7405607030687545.5.azuredatabricks.net/jobs/919820514950394
+  Pipelines:
+    powertools_silver:
+      Name: powertools-silver-dev
+      URL:  https://adb-7405607030687545.5.azuredatabricks.net/pipelines/dc8db3d2-8aa7-4a8c-a6f4-5bab859afbaf
+  Postgres projects:
+    techsummit:
+      Name: techsummit
+      URL:  (not deployed)
+  Schemas:
+    techsummit_schema:
+      Name: techsummit
+      URL:  https://adb-7405607030687545.5.azuredatabricks.net/explore/data/nikks_fevm_workspace_7405607030687545/techsummit
+  Volumes:
+    datasheets:
+      Name: datasheets
+      URL:  https://adb-7405607030687545.5.azuredatabricks.net/explore/data/volumes/nikks_fevm_workspace_7405607030687545/techsummit/datasheets
+    productmanuals:
+      Name: productmanuals
+      URL:  https://adb-7405607030687545.5.azuredatabricks.net/explore/data/volumes/nikks_fevm_workspace_7405607030687545/techsummit/productmanuals
+
+$ databricks apps get powertools-webshop -p FEVM -o json | jq '{name, id, url, app_status, compute_status, active_deployment: {deployment_id: .active_deployment.deployment_id, status: .active_deployment.status}}'
+{
+  "name": "powertools-webshop",
+  "id": "9e71467c-1b21-4cc7-8c76-490a45f87c95",
+  "url": "https://powertools-webshop-7405607030687545.5.azure.databricksapps.com",
+  "app_status": {
+    "message": "App has status: App is running",
+    "state": "RUNNING"
+  },
+  "compute_status": {
+    "message": "App compute is running.",
+    "state": "ACTIVE"
+  },
+  "active_deployment": {
+    "deployment_id": "01f1bb80ddf71a5aaa0f8723b55c8abf",
+    "status": {
+      "message": "App started successfully",
+      "state": "SUCCEEDED"
+    }
+  }
+}
+
