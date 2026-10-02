@@ -4,8 +4,8 @@ Name: powertools-etl
 Target: dev
 Workspace:
   Host: https://adb-7405607030687545.5.azuredatabricks.net
-  User: nikolaos.servos@databricks.com
-  Path: /Workspace/Users/nikolaos.servos@databricks.com/.bundle/powertools-etl/dev
+  User: [redacted-email]
+  Path: /Workspace/Users/[redacted-email]/.bundle/powertools-etl/dev
 Resources:
   Genie Spaces:
     bosch_powertools_analytics:
@@ -56,4 +56,3 @@ $ databricks apps get powertools-webshop -p FEVM -o json | jq '{name, id, url, a
     }
   }
 }
-

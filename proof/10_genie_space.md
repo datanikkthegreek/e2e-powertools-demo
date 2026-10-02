@@ -2,6 +2,8 @@
 
 ## Live data sources
 
+> **Cardinality warning:** the row counts inside the `description` strings below are baked-in illustrative text from the Genie space's original configuration, not current table cardinalities. [`05_table_counts.md`](05_table_counts.md) contains the live authoritative counts captured on 2026-10-02. The deployed Genie space was not mutated during this proof capture.
+
 ```console
 $ python - <<'PY'
 from databricks.sdk import WorkspaceClient
@@ -111,4 +113,3 @@ PY
   "answer_from_executed_result": "In the techsummit demo dataset, the **PSB 1800 LI-2** on the **18V Li-Ion** platform has the highest torque at **150.0 Nm**. Based on the same techsummit demo dataset, **PSB 1800 LI-2** has sold **1 unit**."
 }
 ```
-
