@@ -6,7 +6,7 @@
 - Warehouse: `a8384833e450ec4e`
 - Evidence captured: 2026-10-02 with the `FEVM` profile using `databricks experimental aitools tools query`
 
-Every dataset query exported in `../src/bosch_power_tools_analytics.lvdash.json`
+Every dataset query exported in `../etl/src/bosch_power_tools_analytics.lvdash.json`
 was executed against the dashboard warehouse. Results below are the actual CLI
 output rendered as tables.
 

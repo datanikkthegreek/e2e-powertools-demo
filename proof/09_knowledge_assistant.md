@@ -17,7 +17,7 @@ for a in w.knowledge_assistants.list_knowledge_assistants():
 PY
 {
   "create_time": "2026-08-24T13:53:17.744Z",
-  "creator": "nikolaos.servos@databricks.com",
+  "creator": "[redacted-email]",
   "description": "Answers questions about real Bosch power-tool operating manuals (safety, specifications, operation, battery/charging or mains, maintenance, troubleshooting, warranty) for the 12 demo power tools. RAG over the PDFs in the manuals/ Volume folder. A few tools are covered by their nearest-variant or family manual (e.g. psr-1080-li uses the Bosch PSB 1080 LI-2 booklet).",
   "display_name": "powertools-manuals-ka",
   "endpoint_name": "ka-44e78d1c-endpoint",
@@ -121,4 +121,3 @@ QUESTION: According to the Bosch GSB 18V-90 C operating manual, what should I do
   }
 }
 ```
-
