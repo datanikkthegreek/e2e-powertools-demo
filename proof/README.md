@@ -15,6 +15,7 @@ All outputs in this directory are real captures produced on 2026-10-02 against D
 | `09_knowledge_assistant.md` | Knowledge Assistant | KA/source/endpoint state and a real manual-cited answer from the endpoint. |
 | `10_genie_space.md` | Genie | Live seven-table + manuals-volume configuration and two completed NL-to-SQL benchmark executions. |
 | `11_zerobus_live_funnel.md` | App + Zerobus + ETL | Two HTTP 200 app events, raw count advancement, and continuous landing in both event tables. |
+| `12_dashboard.md` | AI/BI dashboard | 11 dataset queries + real executed results. |
 | `notebooks/verify_demo.ipynb` | Cross-component verification | Executed key queries with committed output cells. |
 | `notebooks/knowledge_assistant_executed.ipynb` | Knowledge Assistant | Executed read-only copy of the KA setup notebook with committed output cells. |
 
@@ -25,8 +26,8 @@ $ databricks current-user me -p FEVM | jq '{active, displayName, id, userName}'
 {
   "active": true,
   "displayName": "Nikolaos Servos",
-  "id": "4051579935178741",
-  "userName": "nikolaos.servos@databricks.com"
+  "id": "[redacted-account-id]",
+  "userName": "[redacted-email]"
 }
 ```
 

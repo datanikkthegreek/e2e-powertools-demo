@@ -4,8 +4,7 @@ Name: powertools-etl
 Target: dev
 Workspace:
   Host: https://adb-7405607030687545.5.azuredatabricks.net
-  User: nikolaos.servos@databricks.com
-  Path: /Workspace/Users/nikolaos.servos@databricks.com/.bundle/powertools-etl/dev
+  User: [redacted-email]
+  Path: /Workspace/Users/[redacted-email]/.bundle/powertools-etl/dev
 
 Validation OK!
-

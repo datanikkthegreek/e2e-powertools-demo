@@ -2,6 +2,12 @@
 
 ## Live data sources
 
+The row figures inside the captured `description` fields below are illustrative
+text baked into the Genie space when it was created, not current table
+cardinalities. The authoritative live counts captured on 2026-10-02 are in
+[`05_table_counts.md`](05_table_counts.md) (including `event_add_to_cart` 860,
+`event_view_item` 3,031, `fact_purchase` 36, and `fact_purchase_line` 47).
+
 ```console
 $ python - <<'PY'
 from databricks.sdk import WorkspaceClient
@@ -111,4 +117,3 @@ PY
   "answer_from_executed_result": "In the techsummit demo dataset, the **PSB 1800 LI-2** on the **18V Li-Ion** platform has the highest torque at **150.0 Nm**. Based on the same techsummit demo dataset, **PSB 1800 LI-2** has sold **1 unit**."
 }
 ```
-
