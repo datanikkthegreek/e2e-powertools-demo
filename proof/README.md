@@ -25,7 +25,7 @@ All outputs in this directory are real captures produced on 2026-10-02 against D
 $ databricks current-user me -p FEVM | jq '{active, displayName, id, userName}'
 {
   "active": true,
-  "displayName": "Nikolaos Servos",
+  "displayName": "[redacted-name]",
   "id": "[redacted-account-id]",
   "userName": "[redacted-email]"
 }
